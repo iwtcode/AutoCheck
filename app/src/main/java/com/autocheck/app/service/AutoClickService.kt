@@ -107,12 +107,13 @@ class AutoClickService : Service() {
 
         AutoClickState.resetForNewRun()
         if (!credentials.isComplete) {
-            AutoClickState.error("Укажите логин и пароль в настройках")
+            AutoClickState.error("Добавьте хотя бы один аккаунт в настройках")
             AutoClickState.setStatus(EngineStatus.ERROR)
             finishService()
             return
         }
-        AutoClickState.info("Запуск автопосещения. Маршрут: ${credentials.route.title}")
+        val accountCount = credentials.accounts.count { it.isComplete }
+        AutoClickState.info("Запуск автопосещения. Аккаунтов: $accountCount. Маршрут: ${credentials.route.title}")
 
         // Обновляем то же самое уведомление, и только когда его содержимое действительно изменилось
         notificationJob = scope.launch {
@@ -134,7 +135,9 @@ class AutoClickService : Service() {
             val router = NetworkRouter(applicationContext)
             try {
                 router.start()
-                AutoClickEngine(SutClient(credentials.route, router)).run(credentials)
+                // Аккаунты перечитываются каждый цикл, остальные настройки действуют до перезапуска
+                AutoClickEngine { SutClient(credentials.route, router) }
+                    .run(credentials.timeoutSec) { store.loadAccounts() }
             } finally {
                 router.stop()
                 withContext(NonCancellable) {

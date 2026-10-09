@@ -46,7 +46,7 @@ data class IosColors(
     val fill: Color,
     /** Дорожка слайдера и выключенный переключатель. */
     val track: Color,
-    /** Плавающие элементы (панель вкладок, «Сохранить», круглые кнопки): сплошная заливка. */
+    /** Плавающие элементы (панель вкладок, круглые кнопки): сплошная заливка. */
     val bar: Color,
     /** Тонкая кромка плавающих элементов вместо тени. */
     val edge: Color,
@@ -174,12 +174,12 @@ fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     }
 }
 
-/** Цвет точки уровня лога: серый — инфо, зелёный — успех, оранжевый — предупреждение, красный — ошибка. */
+/** Цвет точки уровня лога: голубой — инфо, зелёный — успех, оранжевый — предупреждение, красный — ошибка. */
 @Composable
 fun LogLevel.color(): Color {
     val c = Ios.colors
     return when (this) {
-        LogLevel.INFO -> c.secondaryLabel
+        LogLevel.INFO -> c.accent
         LogLevel.SUCCESS -> c.success
         LogLevel.WARNING -> c.orange
         LogLevel.ERROR -> c.danger

@@ -66,7 +66,7 @@ val CardShape = RoundedCornerShape(26.dp)
 // ───────────────────────── Плавающие элементы ─────────────────────────
 
 /**
- * Плавающий элемент (панель вкладок, «Сохранить», круглые кнопки): сплошная заливка и тонкая кромка.
+ * Плавающий элемент (панель вкладок, круглые кнопки): сплошная заливка и тонкая кромка.
  * Без теней, градиентов и бликов — плоский чистый вид.
  */
 @Composable
@@ -242,27 +242,77 @@ fun RoundIconButton(
     }
 }
 
-/** Заполненная кнопка-«таблетка» основного действия: сплошной оранжевый. */
+/** Вид кнопки [IosButton]. */
+enum class IosButtonStyle {
+    /** Серая заливка, тёмный текст и серый кружок со значком. */
+    Neutral,
+
+    /** Сплошная заливка цветом, белый текст и белый кружок с цветным значком. */
+    Filled,
+
+    /** Лёгкая заливка цветом, цветной текст и цветной кружок с белым значком. */
+    Tinted,
+}
+
+private class ButtonColors(val container: Color, val content: Color, val badge: Color, val glyph: Color)
+
+/**
+ * Компактная кнопка-капсула в стиле iOS: значок в кружке и подпись. По умолчанию занимает ровно
+ * столько места, сколько нужно содержимому; для кнопки на всю ширину или в `Row` с весом
+ * передайте [modifier] (`fillMaxWidth()`, `weight(1f)`) — содержимое останется по центру.
+ *
+ * @param tint цвет для [IosButtonStyle.Filled] и [IosButtonStyle.Tinted]; по умолчанию голубой.
+ * @param height высота; меньше 40 dp включает уменьшенный вариант (для кнопок рядом с заголовком).
+ */
 @Composable
-fun PillButton(
+fun IosButton(
     text: String,
+    icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = 50.dp,
+    style: IosButtonStyle = IosButtonStyle.Neutral,
+    tint: Color? = null,
+    height: Dp = 44.dp,
 ) {
-    Box(
+    val c = Ios.colors
+    val base = tint ?: if (style == IosButtonStyle.Filled) c.accent else c.accentText
+    val colors = when (style) {
+        IosButtonStyle.Neutral -> ButtonColors(c.fill, c.label, c.tertiaryLabel, Color.White)
+        IosButtonStyle.Filled -> ButtonColors(base, Color.White, Color.White, base)
+        IosButtonStyle.Tinted ->
+            ButtonColors(base.copy(alpha = if (c.isDark) 0.20f else 0.12f), base, base, Color.White)
+    }
+    val compact = height < 40.dp
+    val badgeSize = if (compact) 20.dp else 26.dp
+
+    Row(
         modifier = modifier
             .iosClickable(onClick = onClick)
             .height(height)
             .clip(CircleShape)
-            .background(Ios.colors.orange)
-            .padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center,
+            .background(colors.container)
+            .padding(start = if (compact) 7.dp else 9.dp, end = if (compact) 14.dp else 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
     ) {
+        Box(
+            modifier = Modifier
+                .size(badgeSize)
+                .clip(CircleShape)
+                .background(colors.badge),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.glyph,
+                modifier = Modifier.size(badgeSize * 0.64f),
+            )
+        }
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+            style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleSmall,
+            color = colors.content,
             maxLines = 1,
         )
     }

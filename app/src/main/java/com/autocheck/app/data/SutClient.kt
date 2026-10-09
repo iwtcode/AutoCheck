@@ -30,11 +30,14 @@ sealed interface ScheduleResult {
     /** Сессия истекла — нужна повторная авторизация. */
     data object SessionExpired : ScheduleResult
 
-    /** [lessonIds] — занятия с доступной кнопкой «Начать занятие». */
+    /** [lessonIds] — занятия, у которых на странице есть кнопка (span с id `knop…`). */
     data class Ok(val week: String, val lessonIds: List<String>) : ScheduleResult
 }
 
-/** HTTP-клиент личного кабинета lk.sut.ru. Порт методов `login()` и тела цикла `auto_click()`. */
+/**
+ * HTTP-клиент личного кабинета lk.sut.ru: одна сессия (набор cookie) на один аккаунт.
+ * Порт методов `login()` и тела цикла `auto_click()`.
+ */
 class SutClient(
     private val route: TrafficRoute = TrafficRoute.SYSTEM,
     private val router: NetworkRouter? = null,
@@ -83,10 +86,27 @@ class SutClient(
             Request.Builder().url(authUrl).post(EMPTY_BODY.toRequestBody()).build()
         ).text()
 
-        if (answer.trim() != "1") return LoginResult.BAD_CREDENTIALS
+        // как в Python: `if '1' in text`
+        if (!answer.contains('1')) return LoginResult.BAD_CREDENTIALS
 
         http.newCall(Request.Builder().url("$CABINET?login=yes").get().build()).text()
         return LoginResult.SUCCESS
+    }
+
+    /**
+     * Вход по готовому токену: он подставляется как cookie `miden` (в Python — `{'miden': token}`).
+     * Запросов не делает, поэтому годность токена выясняется при первой загрузке расписания.
+     */
+    fun useToken(token: String) {
+        cookieJar.clear()
+        cookieJar.add(
+            Cookie.Builder()
+                .name(TOKEN_COOKIE)
+                .value(token.trim())
+                .hostOnlyDomain(HOST)
+                .path("/")
+                .build()
+        )
     }
 
     /** @throws IOException, IllegalStateException */
@@ -103,9 +123,8 @@ class SutClient(
             ?.takeIf { it.isNotEmpty() }
             ?: error("Не удалось определить номер недели")
 
-        val ids = doc.select("span[id^=knop]")
-            .filter { it.text() == START_LABEL }
-            .map { it.id().removePrefix("knop") }
+        // как в Python: берутся все span с id, начинающимся на «knop»
+        val ids = doc.select("span[id^=knop]").map { it.id().removePrefix("knop") }
 
         return ScheduleResult.Ok(week, ids)
     }
@@ -177,13 +196,20 @@ class SutClient(
 
         @Synchronized
         fun clear() = store.clear()
+
+        @Synchronized
+        fun add(cookie: Cookie) {
+            store.removeAll { it.name == cookie.name && it.domain == cookie.domain && it.path == cookie.path }
+            store.add(cookie)
+        }
     }
 
     private companion object {
         const val CABINET = "https://lk.sut.ru/cabinet/"
         const val SCHEDULE_URL = "https://lk.sut.ru/cabinet/project/cabinet/forms/raspisanie.php"
         const val ERR_MSG = "У Вас нет прав доступа. Или необходимо перезагрузить приложение.."
-        const val START_LABEL = "Начать занятие"
+        const val HOST = "lk.sut.ru"
+        const val TOKEN_COOKIE = "miden"
         val EMPTY_BODY = ByteArray(0)
     }
 }

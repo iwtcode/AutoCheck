@@ -1,5 +1,7 @@
 package com.autocheck.app.data
 
+import java.util.UUID
+
 enum class LogLevel { INFO, SUCCESS, WARNING, ERROR }
 
 /**
@@ -61,13 +63,54 @@ enum class ThemeMode(val title: String, val description: String) {
     DARK("Тёмная", "Тёмное оформление независимо от настроек Android."),
 }
 
-data class Credentials(
+/** Как аккаунт входит в личный кабинет. */
+enum class AccountType(val title: String) {
+    /** Логин и пароль: приложение входит само и при истечении сессии входит заново. */
+    PASSWORD("Логин и пароль"),
+
+    /** Готовый токен: значение cookie `miden` из браузера. Повторный вход невозможен. */
+    TOKEN("Токен"),
+}
+
+/** Один аккаунт личного кабинета. [id] нужен, чтобы отличать аккаунты и хранить сессию каждого отдельно. */
+data class Account(
+    val id: String = UUID.randomUUID().toString(),
+    val type: AccountType = AccountType.PASSWORD,
     val login: String = "",
     val password: String = "",
+    val token: String = "",
+) {
+    val isComplete: Boolean
+        get() = when (type) {
+            AccountType.PASSWORD -> login.isNotBlank() && password.isNotBlank()
+            AccountType.TOKEN -> token.isNotBlank()
+        }
+
+    /** Ничего не введено: такой аккаунт при сохранении отбрасывается. */
+    val isBlank: Boolean
+        get() = login.isBlank() && password.isEmpty() && token.isBlank()
+
+    /** Подпись для журнала и списка: логин либо последние символы токена. */
+    val label: String
+        get() = when (type) {
+            AccountType.PASSWORD -> login.ifBlank { "без логина" }
+            AccountType.TOKEN -> "токен ...${token.takeLast(4)}"
+        }
+
+    /** Убирает лишние пробелы и поля, не относящиеся к выбранному способу входа. */
+    fun normalized(): Account = when (type) {
+        AccountType.PASSWORD -> copy(login = login.trim(), token = "")
+        AccountType.TOKEN -> copy(login = "", password = "", token = token.trim())
+    }
+}
+
+data class Credentials(
+    val accounts: List<Account> = emptyList(),
     val timeoutSec: Int = 30,
     val route: TrafficRoute = TrafficRoute.SYSTEM,
 ) {
-    val isComplete get() = login.isNotBlank() && password.isNotBlank()
+    /** Есть хотя бы один аккаунт, с которым можно работать. */
+    val isComplete get() = accounts.any { it.isComplete }
 }
 
 /**

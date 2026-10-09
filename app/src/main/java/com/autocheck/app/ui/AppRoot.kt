@@ -133,7 +133,6 @@ fun AppRoot(vm: MainViewModel) {
 
                     Tab.Settings -> SettingsScreen(
                         vm = vm,
-                        running = status == EngineStatus.RUNNING || status == EngineStatus.CONNECTING,
                         bottomInset = bottomInset,
                     )
                 }

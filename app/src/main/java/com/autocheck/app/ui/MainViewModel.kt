@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import com.autocheck.app.data.Account
+import com.autocheck.app.data.AccountType
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.Credentials
 import com.autocheck.app.data.NotificationPrefs
@@ -21,31 +23,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var saved by mutableStateOf(initial)
         private set
 
-    var login by mutableStateOf(initial.login)
-    var password by mutableStateOf(initial.password)
-    var timeout by mutableIntStateOf(initial.timeoutSec)
-    var route by mutableStateOf(initial.route)
+    /**
+     * Редактируемый список аккаунтов. Каждое изменение сразу сохраняется в хранилище,
+     * при этом сам список в поле ввода остаётся как есть (с пробелами и пустыми карточками),
+     * чтобы не мешать набору текста.
+     */
+    var accounts by mutableStateOf(initial.accounts)
+        private set
 
-    /** Настройки уведомлений применяются сразу и не требуют кнопки «Сохранить». */
+    var timeout by mutableIntStateOf(initial.timeoutSec)
+        private set
+
+    var route by mutableStateOf(initial.route)
+        private set
+
+    /** Настройки уведомлений применяются и сохраняются сразу. */
     var notifications by mutableStateOf(store.loadNotifications())
         private set
 
-    /** Тема применяется сразу и не требует кнопки «Сохранить». */
+    /** Тема применяется и сохраняется сразу. */
     var themeMode by mutableStateOf(store.loadThemeMode())
+        private set
+
+    /** Запускать проверку автоматически после перезагрузки устройства. */
+    var autoStart by mutableStateOf(store.loadAutoStart())
         private set
 
     init {
         AutoClickState.setNotificationPrefs(notifications)
     }
 
-    val isDirty: Boolean
-        get() = login.trim() != saved.login || password != saved.password || timeout != saved.timeoutSec || route != saved.route
+    /** Аккаунты в том виде, в котором они сохраняются: без лишних пробелов и пустых записей. */
+    private fun cleanedAccounts() = accounts.map { it.normalized() }.filterNot { it.isBlank }
 
     val canStart: Boolean
-        get() = login.isNotBlank() && password.isNotBlank()
+        get() = accounts.any { it.normalized().isComplete }
 
-    fun save() {
-        saved = Credentials(login.trim(), password, timeout, route)
+    fun addAccount(type: AccountType) {
+        accounts = accounts + Account(type = type)
+        persist()
+    }
+
+    fun updateAccount(id: String, transform: (Account) -> Account) {
+        accounts = accounts.map { if (it.id == id) transform(it) else it }
+        persist()
+    }
+
+    fun removeAccount(id: String) {
+        accounts = accounts.filterNot { it.id == id }
+        persist()
+    }
+
+    fun updateTimeout(seconds: Int) {
+        if (seconds == timeout) return
+        timeout = seconds
+        persist()
+    }
+
+    fun updateRoute(value: TrafficRoute) {
+        if (value == route) return
+        route = value
+        persist()
+    }
+
+    /** Записывает аккаунты, интервал и маршрут в зашифрованное хранилище. */
+    private fun persist() {
+        saved = Credentials(cleanedAccounts(), timeout, route)
         store.save(saved)
     }
 
@@ -60,8 +103,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         store.saveThemeMode(mode)
     }
 
+    fun updateAutoStart(enabled: Boolean) {
+        autoStart = enabled
+        store.saveAutoStart(enabled)
+    }
+
     fun start() {
-        save()
         AutoClickService.start(getApplication<Application>())
     }
 

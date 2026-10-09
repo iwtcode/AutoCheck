@@ -7,15 +7,12 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,9 +39,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
@@ -59,6 +58,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,6 +87,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.autocheck.app.data.Account
+import com.autocheck.app.data.AccountType
 import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
@@ -97,12 +99,12 @@ import com.autocheck.app.ui.components.GroupHeader
 import com.autocheck.app.ui.components.GroupedCard
 import com.autocheck.app.ui.components.IconTile
 import com.autocheck.app.ui.components.InsetDivider
+import com.autocheck.app.ui.components.IosButton
+import com.autocheck.app.ui.components.IosButtonStyle
 import com.autocheck.app.ui.components.IosSlider
 import com.autocheck.app.ui.components.IosSwitch
 import com.autocheck.app.ui.components.LargeTitle
-import com.autocheck.app.ui.components.PillButton
 import com.autocheck.app.ui.components.RoundIconButton
-import com.autocheck.app.ui.components.floating
 import com.autocheck.app.ui.components.iosClickable
 import com.autocheck.app.ui.components.pressHighlight
 import com.autocheck.app.ui.theme.Brand
@@ -113,15 +115,12 @@ import kotlin.math.roundToInt
 private const val CHECK_ATTEMPTS = 10
 private const val CHECK_INTERVAL_MS = 500L
 
-/** Высота плавающей панели «Сохранить» вместе с отступом. */
-private val SaveBarSpace: Dp = 84.dp
-
-/** Нижний отступ прокручиваемых страниц: место под панель вкладок и, при необходимости, панель «Сохранить». */
+/** Нижний отступ прокручиваемых страниц: место под плавающую панель вкладок. */
 private val LocalContentBottom = compositionLocalOf { 0.dp }
 
 /** Разделы настроек. Главная страница настроек — список этих разделов. */
 private enum class SettingsPage(val title: String, val icon: ImageVector) {
-    Account("Аккаунт", Icons.Rounded.Person),
+    Account("Аккаунты", Icons.Rounded.Person),
     Connection("Подключение", Icons.Rounded.Wifi),
     Notifications("Уведомления", Icons.Rounded.Notifications),
     Appearance("Оформление", Icons.Rounded.Palette),
@@ -129,7 +128,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
 }
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, running: Boolean, bottomInset: Dp) {
+fun SettingsScreen(vm: MainViewModel, bottomInset: Dp) {
     val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var ignoringBattery by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
@@ -155,12 +154,7 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean, bottomInset: Dp) {
     // Системная кнопка «Назад» возвращает к списку разделов
     BackHandler(enabled = page != null) { page = null }
 
-    val showSaveBar = vm.isDirty &&
-        (page == null || page == SettingsPage.Account || page == SettingsPage.Connection)
-
-    val contentBottom = if (showSaveBar) bottomInset + SaveBarSpace else bottomInset
-
-    CompositionLocalProvider(LocalContentBottom provides contentBottom) {
+    CompositionLocalProvider(LocalContentBottom provides bottomInset) {
         Box(Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = page,
@@ -196,21 +190,11 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean, bottomInset: Dp) {
                     SettingsPage.Appearance -> AppearancePage(vm, onBack = { page = null })
 
                     SettingsPage.Background -> BackgroundPage(
+                        vm = vm,
                         ignoringBattery = ignoringBattery,
                         onBack = { page = null },
                     )
                 }
-            }
-
-            AnimatedVisibility(
-                visible = showSaveBar,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = bottomInset),
-                enter = fadeIn(tween(200)) + slideInVertically(tween(260)) { it / 2 },
-                exit = fadeOut(tween(160)) + slideOutVertically(tween(200)) { it / 2 },
-            ) {
-                SaveBar(onSave = vm::save, running = running)
             }
         }
     }
@@ -239,61 +223,144 @@ private fun SettingsHub(vm: MainViewModel, ignoringBattery: Boolean, onOpen: (Se
 
 private fun summaryOf(page: SettingsPage, vm: MainViewModel, ignoringBattery: Boolean): String =
     when (page) {
-        SettingsPage.Account -> vm.login.trim().ifEmpty { "Логин и пароль не указаны" }
+        SettingsPage.Account -> {
+            val ready = vm.accounts.map { it.normalized() }.filter { it.isComplete }
+            when (ready.size) {
+                0 -> "Аккаунты не добавлены"
+                1 -> ready.first().label
+                else -> "Аккаунтов: ${ready.size}"
+            }
+        }
         SettingsPage.Connection -> "${vm.route.title} · проверка каждые ${vm.timeout} с"
         SettingsPage.Notifications ->
             "Типов событий в уведомлении: ${vm.notifications.enabledEventTypes} из ${NotificationPrefs.EVENT_TYPES}"
 
         SettingsPage.Appearance -> vm.themeMode.title
 
-        SettingsPage.Background ->
-            if (ignoringBattery) "Оптимизация батареи отключена" else "Рекомендуется отключить оптимизацию батареи"
+        SettingsPage.Background -> {
+            val battery = if (ignoringBattery) "Оптимизация батареи отключена" else "Оптимизация батареи включена"
+            "$battery · автозапуск ${if (vm.autoStart) "вкл" else "выкл"}"
+        }
     }
 
 // ───────────────────────── Разделы ─────────────────────────
 
 @Composable
 private fun AccountPage(vm: MainViewModel, onBack: () -> Unit) {
-    var showPassword by remember { mutableStateOf(false) }
-
     PageScaffold {
-        PageHeader("Аккаунт", onBack)
+        PageHeader("Аккаунты", onBack)
 
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            GroupHeader("Вход в lk.sut.ru")
+        if (vm.accounts.isEmpty()) {
             GroupedCard {
-                FieldRow(
-                    label = "Логин",
-                    placeholder = "Введите логин",
-                    value = vm.login,
-                    onValueChange = { vm.login = it },
-                    keyboardType = KeyboardType.Email,
-                )
-                InsetDivider()
-                FieldRow(
-                    label = "Пароль",
-                    placeholder = "Введите пароль",
-                    value = vm.password,
-                    onValueChange = { vm.password = it },
-                    keyboardType = KeyboardType.Password,
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailing = {
-                        Box(
-                            Modifier
-                                .iosClickable(pressedScale = 0.88f) { showPassword = !showPassword }
-                                .size(36.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                contentDescription = if (showPassword) "Скрыть пароль" else "Показать пароль",
-                                tint = Ios.colors.secondaryLabel,
-                            )
-                        }
-                    },
+                Text(
+                    "Аккаунтов пока нет. Добавьте логин и пароль или токен.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Ios.colors.secondaryLabel,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
                 )
             }
-            GroupFooter("Данные хранятся на устройстве в зашифрованном виде.")
+        }
+
+        vm.accounts.forEachIndexed { index, account ->
+            key(account.id) { AccountSection(vm, account, number = index + 1) }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Добавить аккаунт")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                IosButton(
+                    text = "С паролем",
+                    icon = Icons.Rounded.Add,
+                    onClick = { vm.addAccount(AccountType.PASSWORD) },
+                    style = IosButtonStyle.Tinted,
+                    tint = Ios.colors.orange,
+                    modifier = Modifier.weight(1f),
+                )
+                IosButton(
+                    text = "С токеном",
+                    icon = Icons.Rounded.Add,
+                    onClick = { vm.addAccount(AccountType.TOKEN) },
+                    style = IosButtonStyle.Tinted,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            GroupFooter(
+                "Данные хранятся на устройстве в зашифрованном виде. " +
+                    "Изменения сохраняются автоматически и применяются при следующей проверке."
+            )
+        }
+    }
+}
+
+/** Карточка одного аккаунта: поля для выбранного способа входа и кнопка удаления. */
+@Composable
+private fun AccountSection(vm: MainViewModel, account: Account, number: Int) {
+    var reveal by remember { mutableStateOf(false) }
+    val c = Ios.colors
+
+    val eye: @Composable () -> Unit = {
+        Box(
+            Modifier
+                .iosClickable(pressedScale = 0.88f) { reveal = !reveal }
+                .size(36.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (reveal) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                contentDescription = if (reveal) "Скрыть" else "Показать",
+                tint = c.secondaryLabel,
+            )
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            GroupHeader("$number · ${account.type.title}")
+            IosButton(
+                text = "Удалить",
+                icon = Icons.Rounded.Delete,
+                onClick = { vm.removeAccount(account.id) },
+                style = IosButtonStyle.Tinted,
+                tint = c.danger,
+                height = 32.dp,
+            )
+        }
+        GroupedCard {
+            when (account.type) {
+                AccountType.PASSWORD -> {
+                    FieldRow(
+                        label = "Логин",
+                        placeholder = "Введите логин",
+                        value = account.login,
+                        onValueChange = { v -> vm.updateAccount(account.id) { it.copy(login = v) } },
+                        keyboardType = KeyboardType.Email,
+                    )
+                    InsetDivider()
+                    FieldRow(
+                        label = "Пароль",
+                        placeholder = "Введите пароль",
+                        value = account.password,
+                        onValueChange = { v -> vm.updateAccount(account.id) { it.copy(password = v) } },
+                        keyboardType = KeyboardType.Password,
+                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailing = eye,
+                    )
+                }
+
+                AccountType.TOKEN -> FieldRow(
+                    label = "Токен",
+                    placeholder = "Значение cookie miden",
+                    value = account.token,
+                    onValueChange = { v -> vm.updateAccount(account.id) { it.copy(token = v) } },
+                    keyboardType = KeyboardType.Password,
+                    visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailing = eye,
+                )
+            }
         }
     }
 }
@@ -314,13 +381,14 @@ private fun ConnectionPage(vm: MainViewModel, onBack: () -> Unit) {
                         selected = vm.route == option,
                         title = option.title,
                         description = option.description,
-                        onClick = { vm.route = option },
+                        onClick = { vm.updateRoute(option) },
                     )
                 }
             }
             GroupFooter(
                 "Режимы «без VPN» не сработают, если в настройках VPN включена блокировка соединений без VPN. " +
-                    "Если выбранной сети нет, запрос не отправляется и будет повторён при следующей проверке."
+                    "Если выбранной сети нет, запрос не отправляется и будет повторён при следующей проверке. " +
+                    "Изменения сохраняются автоматически и вступают в силу при следующем запуске проверки."
             )
         }
 
@@ -334,14 +402,15 @@ private fun ConnectionPage(vm: MainViewModel, onBack: () -> Unit) {
                     }
                     IosSlider(
                         value = vm.timeout.toFloat(),
-                        onValueChange = { vm.timeout = (it / 5).roundToInt() * 5 },
+                        onValueChange = { vm.updateTimeout((it / 5).roundToInt() * 5) },
                         valueRange = 5f..300f,
                     )
                 }
             }
             GroupFooter(
                 "Как часто приложение проверяет расписание. Чем меньше значение, тем быстрее срабатывает " +
-                    "автопосещение и тем выше расход батареи."
+                    "автопосещение и тем выше расход батареи. Изменение сохраняется автоматически " +
+                    "и вступает в силу при следующем запуске проверки."
             )
         }
     }
@@ -453,7 +522,7 @@ private fun AppearancePage(vm: MainViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun BackgroundPage(ignoringBattery: Boolean, onBack: () -> Unit) {
+private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: () -> Unit) {
     val context = LocalContext.current
     val c = Ios.colors
 
@@ -478,20 +547,39 @@ private fun BackgroundPage(ignoringBattery: Boolean, onBack: () -> Unit) {
                     }
                 }
             } else {
-                PillButton(
+                IosButton(
                     text = "Отключить оптимизацию батареи",
+                    icon = Icons.Rounded.BatteryChargingFull,
                     onClick = {
                         context.startActivity(
                             Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                                 .setData(Uri.parse("package:${context.packageName}"))
                         )
                     },
+                    style = IosButtonStyle.Tinted,
+                    tint = c.orange,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
             GroupFooter(
                 "Android может ограничивать работу приложений при выключенном экране. " +
                     "Исключите AutoCheck из оптимизации батареи, чтобы проверки не прерывались."
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Автозапуск")
+            GroupedCard {
+                SwitchRow(
+                    title = "Автозапуск",
+                    description = "Запуск приложения после перезагрузки",
+                    checked = vm.autoStart,
+                    onCheckedChange = vm::updateAutoStart,
+                )
+            }
+            GroupFooter(
+                "Работает, если добавлен хотя бы один аккаунт. На некоторых прошивках (Xiaomi, Huawei, " +
+                    "Samsung и др.) автозапуск также нужно разрешить в системных настройках приложения."
             )
         }
     }
@@ -532,37 +620,6 @@ private fun PageHeader(title: String, onBack: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = Ios.colors.label,
         )
-    }
-}
-
-/** Панель «Сохранить»: плоская плавающая капсула над панелью вкладок, пока есть несохранённые изменения. */
-@Composable
-private fun SaveBar(onSave: () -> Unit, running: Boolean) {
-    val c = Ios.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .floating(RoundedCornerShape(32.dp))
-            .padding(start = 20.dp, top = 10.dp, bottom = 10.dp, end = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Есть несохранённые изменения",
-                style = MaterialTheme.typography.titleSmall,
-                color = c.label,
-            )
-            if (running) {
-                Text(
-                    "Применятся при следующем запуске",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.secondaryLabel,
-                )
-            }
-        }
-        PillButton(text = "Сохранить", onClick = onSave, height = 44.dp)
     }
 }
 

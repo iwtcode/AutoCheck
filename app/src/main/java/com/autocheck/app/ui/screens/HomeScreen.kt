@@ -79,8 +79,17 @@ private fun heroStyle(status: EngineStatus): HeroStyle {
             buttonIcon = Color.White,
         )
 
-        // Подключение и работа: оранжевая карточка, белая кнопка с оранжевым значком
-        EngineStatus.CONNECTING, EngineStatus.RUNNING -> HeroStyle(
+        // Подключение: голубая карточка, белая кнопка с голубым значком
+        EngineStatus.CONNECTING -> HeroStyle(
+            bg = c.accent,
+            title = Color.White,
+            subtitle = Color.White.copy(alpha = 0.88f),
+            button = Color.White,
+            buttonIcon = c.accent,
+        )
+
+        // Работа: оранжевая карточка, белая кнопка с оранжевым значком
+        EngineStatus.RUNNING -> HeroStyle(
             bg = c.orange,
             title = Color.White,
             subtitle = Color.White.copy(alpha = 0.88f),
@@ -141,7 +150,7 @@ fun HomeScreen(
 
         if (!hasCredentials) {
             Banner(
-                text = "Укажите логин и пароль от lk.sut.ru в настройках",
+                text = "Добавьте аккаунт от lk.sut.ru в настройках",
                 onClick = onOpenSettings,
             )
         }

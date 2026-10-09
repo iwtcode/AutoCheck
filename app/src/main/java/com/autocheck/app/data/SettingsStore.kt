@@ -5,24 +5,73 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
 
-/** Замена `options.txt`: логин, пароль и интервал хранятся в зашифрованных SharedPreferences. */
+/** Замена `options.txt`: аккаунты и интервал хранятся в зашифрованных SharedPreferences. */
 class SettingsStore(context: Context) {
     private val prefs: SharedPreferences = createPrefs(context.applicationContext)
 
     fun load() = Credentials(
-        login = prefs.getString(KEY_LOGIN, "").orEmpty(),
-        password = prefs.getString(KEY_PASSWORD, "").orEmpty(),
+        accounts = loadAccounts(),
         timeoutSec = prefs.getInt(KEY_TIMEOUT, DEFAULT_TIMEOUT),
         route = runCatching { TrafficRoute.valueOf(prefs.getString(KEY_ROUTE, null).orEmpty()) }
             .getOrDefault(TrafficRoute.SYSTEM),
     )
 
     fun save(credentials: Credentials) = prefs.edit {
-        putString(KEY_LOGIN, credentials.login)
-        putString(KEY_PASSWORD, credentials.password)
+        putString(KEY_ACCOUNTS, accountsToJson(credentials.accounts))
         putInt(KEY_TIMEOUT, credentials.timeoutSec)
         putString(KEY_ROUTE, credentials.route.name)
+    }
+
+    /** Только список аккаунтов. Движок перечитывает его каждый цикл — аналог перезагрузки файла аккаунтов в Python. */
+    fun loadAccounts(): List<Account> {
+        val raw = prefs.getString(KEY_ACCOUNTS, null)
+        if (raw != null) return runCatching { accountsFromJson(raw) }.getOrDefault(emptyList())
+
+        // Миграция с версии с одним аккаунтом: логин и пароль лежали в отдельных ключах
+        val login = prefs.getString(KEY_LEGACY_LOGIN, "").orEmpty()
+        val password = prefs.getString(KEY_LEGACY_PASSWORD, "").orEmpty()
+        if (login.isBlank() && password.isEmpty()) return emptyList()
+
+        val migrated = listOf(Account(id = LEGACY_ACCOUNT_ID, login = login.trim(), password = password))
+        prefs.edit {
+            putString(KEY_ACCOUNTS, accountsToJson(migrated))
+            remove(KEY_LEGACY_LOGIN)
+            remove(KEY_LEGACY_PASSWORD)
+        }
+        return migrated
+    }
+
+    private fun accountsToJson(accounts: List<Account>): String {
+        val array = JSONArray()
+        accounts.forEach { a ->
+            array.put(
+                JSONObject()
+                    .put("id", a.id)
+                    .put("type", a.type.name)
+                    .put("login", a.login)
+                    .put("password", a.password)
+                    .put("token", a.token)
+            )
+        }
+        return array.toString()
+    }
+
+    private fun accountsFromJson(raw: String): List<Account> {
+        val array = JSONArray(raw)
+        return (0 until array.length()).map { i ->
+            val o = array.getJSONObject(i)
+            Account(
+                id = o.optString("id").ifBlank { UUID.randomUUID().toString() },
+                type = runCatching { AccountType.valueOf(o.optString("type")) }.getOrDefault(AccountType.PASSWORD),
+                login = o.optString("login"),
+                password = o.optString("password"),
+                token = o.optString("token"),
+            )
+        }
     }
 
     fun loadNotifications(): NotificationPrefs {
@@ -52,13 +101,21 @@ class SettingsStore(context: Context) {
 
     fun saveThemeMode(mode: ThemeMode) = prefs.edit { putString(KEY_THEME, mode.name) }
 
+    /** Запускать ли проверку автоматически после перезагрузки устройства. По умолчанию выключено. */
+    fun loadAutoStart(): Boolean = prefs.getBoolean(KEY_AUTO_START, false)
+
+    fun saveAutoStart(enabled: Boolean) = prefs.edit { putBoolean(KEY_AUTO_START, enabled) }
+
     private companion object {
         const val FILE = "autocheck_secure_prefs"
-        const val KEY_LOGIN = "login"
-        const val KEY_PASSWORD = "password"
+        const val KEY_ACCOUNTS = "accounts"
+        const val KEY_LEGACY_LOGIN = "login"
+        const val KEY_LEGACY_PASSWORD = "password"
+        const val LEGACY_ACCOUNT_ID = "legacy"
         const val KEY_TIMEOUT = "timeout"
         const val KEY_ROUTE = "route"
         const val KEY_THEME = "theme_mode"
+        const val KEY_AUTO_START = "auto_start_on_boot"
         const val KEY_N_LESSON = "notify_lesson"
         const val KEY_N_ERRORS = "notify_errors"
         const val KEY_N_WARNINGS = "notify_warnings"
