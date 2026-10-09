@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Settings as SettingsIcon
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Wifi
@@ -92,6 +93,7 @@ import com.autocheck.app.data.AccountType
 import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
+import com.autocheck.app.service.AutoStartSettings
 import com.autocheck.app.ui.MainViewModel
 import com.autocheck.app.ui.components.Banner
 import com.autocheck.app.ui.components.GroupFooter
@@ -571,15 +573,30 @@ private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: 
             GroupHeader("Автозапуск")
             GroupedCard {
                 SwitchRow(
-                    title = "Автозапуск",
-                    description = "Запуск приложения после перезагрузки",
+                    title = "Запускать после перезагрузки",
+                    description = "После включения или перезагрузки телефона AutoCheck сам начнёт проверку, " +
+                        "открывать приложение не нужно.",
                     checked = vm.autoStart,
                     onCheckedChange = vm::updateAutoStart,
                 )
             }
+            if (AutoStartSettings.isVendorRestricted()) {
+                IosButton(
+                    text = "Открыть настройки автозапуска",
+                    icon = Icons.Rounded.SettingsIcon,
+                    onClick = { AutoStartSettings.open(context) },
+                    style = IosButtonStyle.Tinted,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             GroupFooter(
-                "Работает, если добавлен хотя бы один аккаунт. На некоторых прошивках (Xiaomi, Huawei, " +
-                    "Samsung и др.) автозапуск также нужно разрешить в системных настройках приложения."
+                "Работает, если добавлен хотя бы один аккаунт. " +
+                    if (AutoStartSettings.isVendorRestricted()) {
+                        "Ваша прошивка может блокировать автозапуск: откройте настройки выше и разрешите " +
+                            "AutoCheck запускаться автоматически (на Samsung — не отправляйте приложение в «спящие»)."
+                    } else {
+                        "Дополнительных разрешений на этом устройстве, как правило, не нужно."
+                    }
             )
         }
     }
