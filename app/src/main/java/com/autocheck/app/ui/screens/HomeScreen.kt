@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -149,7 +150,10 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text("Последние события", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = onOpenLog) { Text("Весь журнал") }
+                TextButton(
+                    onClick = onOpenLog,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.secondary),
+                ) { Text("Весь журнал") }
             }
             if (recentLogs.isEmpty()) {
                 Text(
@@ -245,7 +249,12 @@ private fun Hero(
 @Composable
 private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+        Text(
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.secondary,
+            maxLines = 1,
+        )
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,

@@ -48,7 +48,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -70,7 +72,14 @@ import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.ui.MainViewModel
+import com.autocheck.app.ui.theme.accentRadioColors
+import com.autocheck.app.ui.theme.accentSliderColors
+import com.autocheck.app.ui.theme.accentSwitchColors
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+private const val CHECK_ATTEMPTS = 10
+private const val CHECK_INTERVAL_MS = 500L
 
 /** Разделы настроек. Главная страница настроек — список этих разделов. */
 private enum class SettingsPage(val title: String, val icon: ImageVector) {
@@ -88,11 +97,21 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean) {
     var ignoringBattery by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     var notificationsAllowed by remember { mutableStateOf(areNotificationsAllowed(context)) }
 
-    // Обновляем состояние после возврата из системных настроек
+    // Возврат из системных настроек: фиксируем момент, когда приложение снова на экране
+    var resumeCount by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
-        ignoringBattery = isIgnoringBatteryOptimizations(context)
-        notificationsAllowed = areNotificationsAllowed(context)
+        resumeCount++
         onPauseOrDispose { }
+    }
+
+    // Часть прошивок применяет изменение (например, «Нет ограничений») уже после возврата в приложение,
+    // поэтому одной проверки в onResume мало: перепроверяем несколько секунд подряд
+    LaunchedEffect(resumeCount) {
+        repeat(CHECK_ATTEMPTS) {
+            ignoringBattery = isIgnoringBatteryOptimizations(context)
+            notificationsAllowed = areNotificationsAllowed(context)
+            delay(CHECK_INTERVAL_MS)
+        }
     }
 
     // Системная кнопка «Назад» возвращает к списку разделов
@@ -250,7 +269,7 @@ private fun ConnectionPage(vm: MainViewModel, onBack: () -> Unit) {
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        RadioButton(selected = vm.route == option, onClick = null)
+                        RadioButton(selected = vm.route == option, onClick = null, colors = accentRadioColors())
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(option.title, style = MaterialTheme.typography.titleSmall)
@@ -279,6 +298,7 @@ private fun ConnectionPage(vm: MainViewModel, onBack: () -> Unit) {
                 onValueChange = { vm.timeout = (it / 5).roundToInt() * 5 },
                 valueRange = 5f..300f,
                 steps = 58,
+                colors = accentSliderColors(),
             )
         }
     }
@@ -502,7 +522,7 @@ private fun OptionRow(selected: Boolean, title: String, description: String, onC
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        RadioButton(selected = selected, onClick = null)
+        RadioButton(selected = selected, onClick = null, colors = accentRadioColors())
         Spacer(Modifier.width(12.dp))
         Column {
             Text(title, style = MaterialTheme.typography.titleSmall)
@@ -525,7 +545,7 @@ private fun NavRow(icon: ImageVector, title: String, summary: String, onClick: (
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(
@@ -567,7 +587,7 @@ private fun SwitchRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, colors = accentSwitchColors())
     }
 }
 
@@ -576,7 +596,7 @@ private fun GroupLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.secondary,
         modifier = Modifier.padding(start = 4.dp),
     )
 }

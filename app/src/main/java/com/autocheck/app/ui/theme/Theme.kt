@@ -2,6 +2,9 @@ package com.autocheck.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -102,12 +105,35 @@ fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     }
 }
 
+// Оранжевый — основные действия и состояние, синий — элементы управления и навигация
+
+@Composable
+fun accentSwitchColors() = SwitchDefaults.colors(
+    checkedTrackColor = MaterialTheme.colorScheme.secondary,
+    checkedThumbColor = MaterialTheme.colorScheme.onSecondary,
+    checkedBorderColor = MaterialTheme.colorScheme.secondary,
+)
+
+@Composable
+fun accentSliderColors() = SliderDefaults.colors(
+    thumbColor = MaterialTheme.colorScheme.secondary,
+    activeTrackColor = MaterialTheme.colorScheme.secondary,
+    inactiveTrackColor = MaterialTheme.colorScheme.secondaryContainer,
+    activeTickColor = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.38f),
+    inactiveTickColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.38f),
+)
+
+@Composable
+fun accentRadioColors() = RadioButtonDefaults.colors(
+    selectedColor = MaterialTheme.colorScheme.secondary,
+)
+
 /** Цвет точки/текста уровня лога. */
 @Composable
 fun LogLevel.color(): Color {
     val dark = LocalDarkTheme.current
     return when (this) {
-        LogLevel.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+        LogLevel.INFO -> MaterialTheme.colorScheme.secondary
         LogLevel.SUCCESS -> if (dark) Color(0xFF5EDC9A) else Color(0xFF14833F)
         LogLevel.WARNING -> if (dark) Color(0xFFFFC857) else Color(0xFFB36B00)
         LogLevel.ERROR -> MaterialTheme.colorScheme.error
