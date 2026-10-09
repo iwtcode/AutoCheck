@@ -1,5 +1,6 @@
 package com.autocheck.app.data
 
+import android.net.Network
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -7,6 +8,7 @@ import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -15,7 +17,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.jsoup.Jsoup
 import java.io.IOException
+import java.net.InetAddress
+import java.net.Socket
 import java.util.concurrent.TimeUnit
+import javax.net.SocketFactory
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -30,12 +35,39 @@ sealed interface ScheduleResult {
 }
 
 /** HTTP-клиент личного кабинета lk.sut.ru. Порт методов `login()` и тела цикла `auto_click()`. */
-class SutClient {
+class SutClient(
+    private val route: TrafficRoute = TrafficRoute.SYSTEM,
+    private val router: NetworkRouter? = null,
+) {
     private val cookieJar = MemoryCookieJar()
+    private var lastNetwork: Network? = null
+
     private val http = OkHttpClient.Builder()
         .cookieJar(cookieJar)
         .callTimeout(10, TimeUnit.SECONDS)
+        .apply {
+            if (route != TrafficRoute.SYSTEM && router != null) {
+                // Сокеты и DNS-запросы привязываются к выбранной физической сети (в обход VPN)
+                socketFactory(RoutedSocketFactory(::resolveNetwork))
+                dns(object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> =
+                        resolveNetwork().getAllByName(hostname).toList()
+                })
+            }
+        }
         .build()
+
+    /** Выбранная сеть. Запасного маршрута нет: иначе трафик мог бы незаметно уйти в VPN. */
+    private fun resolveNetwork(): Network {
+        val r = router ?: throw IOException("маршрутизатор сети не инициализирован")
+        val network = r.resolve(route)
+            ?: throw IOException("выбранная сеть недоступна (${route.title})")
+        if (network != lastNetwork) {
+            lastNetwork = network
+            AutoClickState.info("маршрут: ${r.label(network)}")
+        }
+        return network
+    }
 
     /** @throws IOException при сетевых ошибках. */
     suspend fun login(login: String, password: String): LoginResult {
@@ -109,6 +141,20 @@ class SutClient {
                 cont.resume(response)
             }
         })
+    }
+
+    /** Каждый новый сокет создаётся фабрикой текущей выбранной сети. */
+    private class RoutedSocketFactory(private val network: () -> Network) : SocketFactory() {
+        private fun factory(): SocketFactory = network().socketFactory
+
+        override fun createSocket(): Socket = factory().createSocket()
+        override fun createSocket(host: String, port: Int): Socket = factory().createSocket(host, port)
+        override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int): Socket =
+            factory().createSocket(host, port, localHost, localPort)
+
+        override fun createSocket(host: InetAddress, port: Int): Socket = factory().createSocket(host, port)
+        override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int): Socket =
+            factory().createSocket(address, port, localAddress, localPort)
     }
 
     private class MemoryCookieJar : CookieJar {

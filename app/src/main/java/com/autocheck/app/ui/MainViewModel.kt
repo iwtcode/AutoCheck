@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.Credentials
 import com.autocheck.app.data.SettingsStore
+import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.service.AutoClickService
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -21,15 +22,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var login by mutableStateOf(initial.login)
     var password by mutableStateOf(initial.password)
     var timeout by mutableIntStateOf(initial.timeoutSec)
+    var route by mutableStateOf(initial.route)
 
     val isDirty: Boolean
-        get() = login.trim() != saved.login || password != saved.password || timeout != saved.timeoutSec
+        get() = login.trim() != saved.login || password != saved.password || timeout != saved.timeoutSec || route != saved.route
 
     val canStart: Boolean
         get() = login.isNotBlank() && password.isNotBlank()
 
     fun save() {
-        saved = Credentials(login.trim(), password, timeout)
+        saved = Credentials(login.trim(), password, timeout, route)
         store.save(saved)
     }
 

@@ -11,10 +11,22 @@ data class LogEntry(
 
 enum class EngineStatus { STOPPED, CONNECTING, RUNNING, ERROR }
 
+/** Как запросы приложения выходят в сеть. */
+enum class TrafficRoute(val title: String, val description: String) {
+    DIRECT(
+        "Напрямую, мимо VPN",
+        "Wi‑Fi, а если его нет — мобильная сеть. Если VPN выключен, это обычное соединение.",
+    ),
+    WIFI("Только Wi‑Fi, мимо VPN", "Запросы идут только через Wi‑Fi или Ethernet."),
+    CELLULAR("Только мобильная сеть, мимо VPN", "Запросы идут только через мобильный интернет."),
+    SYSTEM("Как в системе", "Android сам выбирает маршрут: через VPN, если он включён."),
+}
+
 data class Credentials(
     val login: String = "",
     val password: String = "",
     val timeoutSec: Int = 30,
+    val route: TrafficRoute = TrafficRoute.DIRECT,
 ) {
     val isComplete get() = login.isNotBlank() && password.isNotBlank()
 }

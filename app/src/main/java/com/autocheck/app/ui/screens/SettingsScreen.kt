@@ -6,6 +6,13 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import com.autocheck.app.data.TrafficRoute
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -98,6 +105,40 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean) {
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+
+        Section(
+            title = "Маршрут трафика",
+            hint = "Режимы «мимо VPN» не сработают, если в настройках VPN включена блокировка соединений без VPN. " +
+                "Если выбранной сети нет, запрос не уходит в обход и повторяется на следующем цикле.",
+        ) {
+            Column {
+                TrafficRoute.entries.forEach { option ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .selectable(
+                                selected = vm.route == option,
+                                onClick = { vm.route = option },
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        RadioButton(selected = vm.route == option, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(option.title, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                option.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Section(

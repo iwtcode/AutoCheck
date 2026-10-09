@@ -14,12 +14,15 @@ class SettingsStore(context: Context) {
         login = prefs.getString(KEY_LOGIN, "").orEmpty(),
         password = prefs.getString(KEY_PASSWORD, "").orEmpty(),
         timeoutSec = prefs.getInt(KEY_TIMEOUT, DEFAULT_TIMEOUT),
+        route = runCatching { TrafficRoute.valueOf(prefs.getString(KEY_ROUTE, null).orEmpty()) }
+            .getOrDefault(TrafficRoute.DIRECT),
     )
 
     fun save(credentials: Credentials) = prefs.edit {
         putString(KEY_LOGIN, credentials.login)
         putString(KEY_PASSWORD, credentials.password)
         putInt(KEY_TIMEOUT, credentials.timeoutSec)
+        putString(KEY_ROUTE, credentials.route.name)
     }
 
     private companion object {
@@ -27,6 +30,7 @@ class SettingsStore(context: Context) {
         const val KEY_LOGIN = "login"
         const val KEY_PASSWORD = "password"
         const val KEY_TIMEOUT = "timeout"
+        const val KEY_ROUTE = "route"
         const val DEFAULT_TIMEOUT = 30
 
         fun createPrefs(context: Context): SharedPreferences {

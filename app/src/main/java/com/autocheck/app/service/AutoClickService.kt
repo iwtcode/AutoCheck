@@ -19,7 +19,9 @@ import com.autocheck.app.R
 import com.autocheck.app.data.AutoClickEngine
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.EngineStatus
+import com.autocheck.app.data.NetworkRouter
 import com.autocheck.app.data.SettingsStore
+import com.autocheck.app.data.SutClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,7 +79,7 @@ class AutoClickService : Service() {
             stopSelf()
             return
         }
-        AutoClickState.info("запуск автопосещения")
+        AutoClickState.info("запуск автопосещения, маршрут: ${credentials.route.title}")
 
         // Обновляем уведомление последней строкой журнала
         scope.launch {
@@ -90,9 +92,12 @@ class AutoClickService : Service() {
         }
 
         engineJob = scope.launch {
+            val router = NetworkRouter(applicationContext)
             try {
-                AutoClickEngine().run(credentials)
+                router.start()
+                AutoClickEngine(SutClient(credentials.route, router)).run(credentials)
             } finally {
+                router.stop()
                 if (AutoClickState.status.value != EngineStatus.ERROR) {
                     AutoClickState.setStatus(EngineStatus.STOPPED)
                     AutoClickState.info("автопосещение остановлено")

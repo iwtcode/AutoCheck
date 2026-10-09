@@ -2,6 +2,7 @@ package com.autocheck.app.data
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import java.net.SocketException
 
 /**
  * Главный цикл — порт `AutoClickAPI.auto_click()`.
@@ -44,7 +45,7 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                state.error("ошибка при подключении | ${e.javaClass.simpleName} ${e.message.orEmpty()}")
+                state.error("ошибка при подключении | ${describe(e)}")
             }
             state.info("timeout ${credentials.timeoutSec} секунд перед следующим циклом")
             delay(pauseMs)
@@ -72,10 +73,20 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                state.error("ошибка при подключении | ${e.javaClass.simpleName} ${e.message.orEmpty()}")
+                state.error("ошибка при подключении | ${describe(e)}")
                 state.info("timeout ${credentials.timeoutSec} перед следующей попыткой авторизации")
                 delay(pauseMs)
             }
+        }
+    }
+
+    private fun describe(e: Exception): String {
+        val message = e.message.orEmpty()
+        return if (e is SocketException && message.contains("EPERM")) {
+            "VPN запрещает обход для этого приложения (EPERM). " +
+                "Добавьте AutoCheck в исключения VPN или выберите маршрут «Как в системе»"
+        } else {
+            "${e.javaClass.simpleName} $message"
         }
     }
 }
