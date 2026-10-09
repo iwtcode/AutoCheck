@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -39,6 +40,9 @@ import kotlinx.coroutines.withContext
  *
  * У приложения одно уведомление с постоянным id. Оно обновляется на месте и не создаётся заново:
  * пока сервис работает, в нём кнопка «Остановить», после остановки — кнопка «Включить».
+ *
+ * Штатные действия (actions) Android показывает только в раскрытом уведомлении, поэтому кнопка
+ * дополнительно встроена в свёрнутый вид (см. `notification_collapsed.xml`).
  */
 class AutoClickService : Service() {
 
@@ -161,12 +165,23 @@ class AutoClickService : Service() {
         stopSelf()
     }
 
-    private fun baseNotification(content: NotificationContent): NotificationCompat.Builder =
+    private fun baseNotification(
+        content: NotificationContent,
+        actionLabel: String,
+        actionIntent: PendingIntent,
+    ): NotificationCompat.Builder =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_check)
+            .setColor(ContextCompat.getColor(this, R.color.accent))
+            // Заголовок и текст нужны для экрана блокировки, часов и скринридеров
             .setContentTitle(content.title)
             .setContentText(content.text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(content.text))
+            // Системная «шапка» и штатные действия сохраняются, содержимое — своё
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(collapsedView(content, actionLabel, actionIntent))
+            .setCustomBigContentView(expandedView(content))
+            // В раскрытом виде кнопка показывается как обычное действие
+            .addAction(0, actionLabel, actionIntent)
             .setContentIntent(openAppIntent())
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setWhen(postedAt)
@@ -174,16 +189,33 @@ class AutoClickService : Service() {
             .setOnlyAlertOnce(true)
             .setSilent(true)
 
+    /** Свёрнутый вид: заголовок, одна строка текста и кнопка управления. */
+    private fun collapsedView(
+        content: NotificationContent,
+        actionLabel: String,
+        actionIntent: PendingIntent,
+    ) = RemoteViews(packageName, R.layout.notification_collapsed).apply {
+        setTextViewText(R.id.notification_title, content.title)
+        setTextViewText(R.id.notification_text, content.text)
+        setTextViewText(R.id.notification_action, actionLabel)
+        setOnClickPendingIntent(R.id.notification_action, actionIntent)
+    }
+
+    /** Раскрытый вид: полный текст события. */
+    private fun expandedView(content: NotificationContent) =
+        RemoteViews(packageName, R.layout.notification_expanded).apply {
+            setTextViewText(R.id.notification_title, content.title)
+            setTextViewText(R.id.notification_text, content.text)
+        }
+
     private fun buildRunningNotification(content: NotificationContent): Notification =
-        baseNotification(content)
-            .addAction(0, "Остановить", stopIntent())
+        baseNotification(content, "Остановить", stopIntent())
             .setOngoing(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
 
     private fun buildStoppedNotification(content: NotificationContent): Notification =
-        baseNotification(content)
-            .addAction(0, "Включить", startIntent())
+        baseNotification(content, "Включить", startIntent())
             .setOngoing(false)
             .build()
 

@@ -46,12 +46,19 @@ class SettingsStore(context: Context) {
         putBoolean(KEY_N_CONTROL, value.controlWhenStopped)
     }
 
+    fun loadThemeMode(): ThemeMode =
+        runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME, null).orEmpty()) }
+            .getOrDefault(ThemeMode.SYSTEM)
+
+    fun saveThemeMode(mode: ThemeMode) = prefs.edit { putString(KEY_THEME, mode.name) }
+
     private companion object {
         const val FILE = "autocheck_secure_prefs"
         const val KEY_LOGIN = "login"
         const val KEY_PASSWORD = "password"
         const val KEY_TIMEOUT = "timeout"
         const val KEY_ROUTE = "route"
+        const val KEY_THEME = "theme_mode"
         const val KEY_N_LESSON = "notify_lesson"
         const val KEY_N_ERRORS = "notify_errors"
         const val KEY_N_WARNINGS = "notify_warnings"

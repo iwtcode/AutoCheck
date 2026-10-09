@@ -6,21 +6,37 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.autocheck.app.data.LogLevel
+import com.autocheck.app.data.ThemeMode
 
-private val Indigo = Color(0xFF4F5BD5)
+/** Фирменные цвета: жёлто-оранжевый градиент и дополнительный синий. */
+object Brand {
+    val Yellow = Color(0xFFFFC21A)
+    val Amber = Color(0xFFFFA11A)
+    val Orange = Color(0xFFFF6B00)
+    val DeepOrange = Color(0xFFF2560A)
+
+    /** Дополнительный цвет. */
+    val Blue = Color(0xFF3666FF)
+    val BlueLight = Color(0xFF5E8AFF)
+}
 
 private val LightColors = lightColorScheme(
-    primary = Indigo,
+    primary = Color(0xFFE65F00),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE2E4FF),
-    onPrimaryContainer = Color(0xFF151C6B),
-    secondary = Color(0xFF0E8F7E),
+    primaryContainer = Color(0xFFFFE3CC),
+    onPrimaryContainer = Color(0xFF4A1E00),
+    secondary = Brand.Blue,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFDDE5FF),
+    onSecondaryContainer = Color(0xFF0A2270),
     background = Color(0xFFF5F6FA),
     onBackground = Color(0xFF14161F),
     surface = Color(0xFFF5F6FA),
@@ -34,11 +50,14 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF9AA5FF),
-    onPrimary = Color(0xFF0C1245),
-    primaryContainer = Color(0xFF2B3482),
-    onPrimaryContainer = Color(0xFFE0E3FF),
-    secondary = Color(0xFF5EDCC8),
+    primary = Color(0xFFFFB067),
+    onPrimary = Color(0xFF4A2000),
+    primaryContainer = Color(0xFF6B3200),
+    onPrimaryContainer = Color(0xFFFFE0C7),
+    secondary = Color(0xFF8FA9FF),
+    onSecondary = Color(0xFF0A1F6B),
+    secondaryContainer = Color(0xFF1F3794),
+    onSecondaryContainer = Color(0xFFDCE4FF),
     background = Color(0xFF0E1016),
     onBackground = Color(0xFFE6E8F2),
     surface = Color(0xFF0E1016),
@@ -61,19 +80,32 @@ private val AppTypography = Typography().run {
 
 val MonoStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 
+/** Тёмная ли тема сейчас на самом деле: учитывает и выбор пользователя, и настройку системы. */
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
+/** Нужна ли тёмная тема при выбранном режиме. */
 @Composable
-fun AutoCheckTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
-        typography = AppTypography,
-        content = content,
-    )
+fun ThemeMode.isDark(): Boolean = when (this) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+@Composable
+fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = AppTypography,
+            content = content,
+        )
+    }
 }
 
 /** Цвет точки/текста уровня лога. */
 @Composable
 fun LogLevel.color(): Color {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     return when (this) {
         LogLevel.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
         LogLevel.SUCCESS -> if (dark) Color(0xFF5EDC9A) else Color(0xFF14833F)

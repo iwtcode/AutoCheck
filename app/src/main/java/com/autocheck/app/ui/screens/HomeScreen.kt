@@ -48,6 +48,7 @@ import com.autocheck.app.data.EngineStatus
 import com.autocheck.app.data.LogEntry
 import com.autocheck.app.data.LogLevel
 import com.autocheck.app.data.Stats
+import com.autocheck.app.ui.theme.Brand
 import com.autocheck.app.ui.theme.MonoStyle
 import com.autocheck.app.ui.theme.color
 
@@ -55,8 +56,8 @@ private data class HeroPalette(val from: Color, val to: Color, val title: String
 
 private fun EngineStatus.palette() = when (this) {
     EngineStatus.STOPPED -> HeroPalette(Color(0xFF3B4061), Color(0xFF22263D), "Остановлено")
-    EngineStatus.CONNECTING -> HeroPalette(Color(0xFFD9930D), Color(0xFFB4530A), "Подключение…")
-    EngineStatus.RUNNING -> HeroPalette(Color(0xFF4F5BD5), Color(0xFF0FA894), "Работает")
+    EngineStatus.CONNECTING -> HeroPalette(Brand.BlueLight, Brand.Blue, "Подключение…")
+    EngineStatus.RUNNING -> HeroPalette(Brand.Amber, Brand.DeepOrange, "Работает")
     EngineStatus.ERROR -> HeroPalette(Color(0xFFD02A45), Color(0xFF7D1630), "Ошибка")
 }
 
@@ -235,7 +236,7 @@ private fun Hero(
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.8f),
+                color = Color.White.copy(alpha = 0.92f),
             )
         }
     }

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -66,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.autocheck.app.data.NotificationPrefs
+import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.ui.MainViewModel
 import kotlin.math.roundToInt
@@ -75,6 +77,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Account("Аккаунт", Icons.Rounded.Person),
     Connection("Подключение", Icons.Rounded.Wifi),
     Notifications("Уведомления", Icons.Rounded.Notifications),
+    Appearance("Оформление", Icons.Rounded.Palette),
     Background("Работа в фоне", Icons.Rounded.BatteryChargingFull),
 }
 
@@ -118,6 +121,8 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean) {
                     notificationsAllowed = notificationsAllowed,
                     onBack = { page = null },
                 )
+
+                SettingsPage.Appearance -> AppearancePage(vm, onBack = { page = null })
 
                 SettingsPage.Background -> BackgroundPage(
                     ignoringBattery = ignoringBattery,
@@ -168,6 +173,8 @@ private fun summaryOf(page: SettingsPage, vm: MainViewModel, ignoringBattery: Bo
         SettingsPage.Connection -> "${vm.route.title} · проверка каждые ${vm.timeout} с"
         SettingsPage.Notifications ->
             "Типов событий в уведомлении: ${vm.notifications.enabledEventTypes} из ${NotificationPrefs.EVENT_TYPES}"
+
+        SettingsPage.Appearance -> vm.themeMode.title
 
         SettingsPage.Background ->
             if (ignoringBattery) "Оптимизация батареи отключена" else "Рекомендуется отключить оптимизацию батареи"
@@ -373,6 +380,29 @@ private fun NotificationsPage(vm: MainViewModel, notificationsAllowed: Boolean, 
 }
 
 @Composable
+private fun AppearancePage(vm: MainViewModel, onBack: () -> Unit) {
+    PageScaffold {
+        PageHeader("Оформление", onBack)
+
+        Section(
+            title = "Тема",
+            hint = "Изменение применяется сразу.",
+        ) {
+            Column {
+                ThemeMode.entries.forEach { option ->
+                    OptionRow(
+                        selected = vm.themeMode == option,
+                        title = option.title,
+                        description = option.description,
+                        onClick = { vm.updateThemeMode(option) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BackgroundPage(ignoringBattery: Boolean, onBack: () -> Unit) {
     val context = LocalContext.current
 
@@ -457,6 +487,30 @@ private fun SaveBar(onSave: () -> Unit, running: Boolean) {
                 }
             }
             Button(onClick = onSave, shape = RoundedCornerShape(14.dp)) { Text("Сохранить") }
+        }
+    }
+}
+
+/** Строка с радиокнопкой: название и пояснение. */
+@Composable
+private fun OptionRow(selected: Boolean, title: String, description: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

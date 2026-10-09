@@ -1,3 +1,7 @@
 <resources>
-    <color name="ic_launcher_background">#4F5BD5</color>
+    <!-- Акцент приложения (цвет уведомления) -->
+    <color name="accent">#FFF2560A</color>
+    <!-- Градиент кнопки в уведомлении -->
+    <color name="accent_gradient_start">#FFFFA11A</color>
+    <color name="accent_gradient_end">#FFF2560A</color>
 </resources>

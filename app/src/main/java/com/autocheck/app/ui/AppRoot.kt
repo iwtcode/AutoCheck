@@ -79,6 +79,8 @@ fun AppRoot(vm: MainViewModel) {
                         label = { Text(item.label) },
                         colors = NavigationBarItemDefaults.colors(
                             indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
                         ),
                     )
                 }

@@ -54,6 +54,13 @@ enum class TrafficRoute(val title: String, val description: String) {
     ),
 }
 
+/** Тема оформления приложения. */
+enum class ThemeMode(val title: String, val description: String) {
+    SYSTEM("Как в системе", "Тема меняется вместе с настройкой Android."),
+    LIGHT("Светлая", "Светлое оформление независимо от настроек Android."),
+    DARK("Тёмная", "Тёмное оформление независимо от настроек Android."),
+}
+
 data class Credentials(
     val login: String = "",
     val password: String = "",

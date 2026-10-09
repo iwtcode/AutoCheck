@@ -10,6 +10,7 @@ import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.Credentials
 import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.SettingsStore
+import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.service.AutoClickService
 
@@ -27,6 +28,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Настройки уведомлений применяются сразу и не требуют кнопки «Сохранить». */
     var notifications by mutableStateOf(store.loadNotifications())
+        private set
+
+    /** Тема применяется сразу и не требует кнопки «Сохранить». */
+    var themeMode by mutableStateOf(store.loadThemeMode())
         private set
 
     init {
@@ -48,6 +53,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         notifications = transform(notifications)
         store.saveNotifications(notifications)
         AutoClickState.setNotificationPrefs(notifications)
+    }
+
+    fun updateThemeMode(mode: ThemeMode) {
+        themeMode = mode
+        store.saveThemeMode(mode)
     }
 
     fun start() {
