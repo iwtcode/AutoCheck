@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Следит за физическими сетями устройства (Wi‑Fi, мобильная, Ethernet) и выбирает нужную
- * под [TrafficRoute]. Сокет, привязанный к такой сети, идёт напрямую, минуя VPN.
+ * под [TrafficRoute]. Сокет, привязанный к такой сети, не использует VPN.
  */
 class NetworkRouter(context: Context) {
     private val cm = context.applicationContext.getSystemService(ConnectivityManager::class.java)
@@ -73,6 +73,6 @@ class NetworkRouter(context: Context) {
             caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "мобильная сеть"
             else -> "другая сеть"
         }
-        return "$name, мимо VPN"
+        return "$name, без VPN"
     }
 }

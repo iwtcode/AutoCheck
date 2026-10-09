@@ -99,7 +99,10 @@ fun AppRoot(vm: MainViewModel) {
                 )
 
                 Tab.Log -> LogScreen(logs = logs.asReversed(), onClear = vm::clearLogs)
-                Tab.Settings -> SettingsScreen(vm = vm, running = status == EngineStatus.RUNNING)
+                Tab.Settings -> SettingsScreen(
+                    vm = vm,
+                    running = status == EngineStatus.RUNNING || status == EngineStatus.CONNECTING,
+                )
             }
         }
     }

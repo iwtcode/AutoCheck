@@ -20,21 +20,21 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
             try {
                 when (val schedule = client.fetchSchedule()) {
                     ScheduleResult.SessionExpired -> {
-                        state.warning("срок сессии истёк")
+                        state.warning("Срок сессии истёк, выполняется повторный вход")
                         if (!authorize(credentials, pauseMs)) return
                         continue
                     }
 
                     is ScheduleResult.Ok -> {
                         if (schedule.lessonIds.isEmpty()) {
-                            state.info("нет активных занятий")
+                            state.info("Нет активных занятий", LogCategory.CHECK)
                         } else {
                             for (id in schedule.lessonIds) {
                                 if (client.startLesson(id, schedule.week)) {
-                                    state.success("удалось начать занятие с id: $id")
+                                    state.success("Занятие начато (id: $id)", LogCategory.LESSON)
                                     state.onLessonStarted()
                                 } else {
-                                    state.info("занятие с id: $id ещё не началось")
+                                    state.info("Занятие (id: $id) ещё не началось", LogCategory.CHECK)
                                 }
                             }
                         }
@@ -45,9 +45,9 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                state.error("ошибка при подключении | ${describe(e)}")
+                state.error("Ошибка подключения: ${describe(e)}")
             }
-            state.info("timeout ${credentials.timeoutSec} секунд перед следующим циклом")
+            state.info("Следующая проверка через ${credentials.timeoutSec} с", LogCategory.PAUSE)
             delay(pauseMs)
         }
     }
@@ -59,13 +59,13 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
             try {
                 when (client.login(credentials.login, credentials.password)) {
                     LoginResult.SUCCESS -> {
-                        state.success("успешная авторизация")
+                        state.success("Вход выполнен")
                         state.setStatus(EngineStatus.RUNNING)
                         return true
                     }
 
                     LoginResult.BAD_CREDENTIALS -> {
-                        state.error("ошибка при авторизации: проверьте логин и пароль")
+                        state.error("Ошибка входа: проверьте логин и пароль")
                         state.setStatus(EngineStatus.ERROR)
                         return false
                     }
@@ -73,8 +73,8 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                state.error("ошибка при подключении | ${describe(e)}")
-                state.info("timeout ${credentials.timeoutSec} перед следующей попыткой авторизации")
+                state.error("Ошибка подключения: ${describe(e)}")
+                state.info("Повторная попытка входа через ${credentials.timeoutSec} с", LogCategory.PAUSE)
                 delay(pauseMs)
             }
         }
@@ -83,10 +83,11 @@ class AutoClickEngine(private val client: SutClient = SutClient()) {
     private fun describe(e: Exception): String {
         val message = e.message.orEmpty()
         return if (e is SocketException && message.contains("EPERM")) {
-            "VPN запрещает обход для этого приложения (EPERM). " +
+            "VPN не разрешает приложению использовать выбранную сеть (EPERM). " +
                 "Добавьте AutoCheck в исключения VPN или выберите маршрут «Как в системе»"
         } else {
-            "${e.javaClass.simpleName} $message"
+            val type = e.javaClass.simpleName
+            if (message.isBlank()) type else "$type: $message"
         }
     }
 }

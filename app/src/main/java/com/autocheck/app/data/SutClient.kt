@@ -47,7 +47,7 @@ class SutClient(
         .callTimeout(10, TimeUnit.SECONDS)
         .apply {
             if (route != TrafficRoute.SYSTEM && router != null) {
-                // Сокеты и DNS-запросы привязываются к выбранной физической сети (в обход VPN)
+                // Сокеты и DNS-запросы привязываются к выбранной физической сети (без использования VPN)
                 socketFactory(RoutedSocketFactory(::resolveNetwork))
                 dns(object : Dns {
                     override fun lookup(hostname: String): List<InetAddress> =
@@ -59,12 +59,12 @@ class SutClient(
 
     /** Выбранная сеть. Запасного маршрута нет: иначе трафик мог бы незаметно уйти в VPN. */
     private fun resolveNetwork(): Network {
-        val r = router ?: throw IOException("маршрутизатор сети не инициализирован")
+        val r = router ?: throw IOException("Маршрутизатор сети не инициализирован")
         val network = r.resolve(route)
-            ?: throw IOException("выбранная сеть недоступна (${route.title})")
+            ?: throw IOException("Выбранная сеть недоступна (${route.title})")
         if (network != lastNetwork) {
             lastNetwork = network
-            AutoClickState.info("маршрут: ${r.label(network)}")
+            AutoClickState.info("Маршрут: ${r.label(network)}")
         }
         return network
     }
@@ -101,7 +101,7 @@ class SutClient(
             ?.split(Regex("\\s+"))
             ?.firstOrNull()
             ?.takeIf { it.isNotEmpty() }
-            ?: error("не удалось определить номер недели")
+            ?: error("Не удалось определить номер недели")
 
         val ids = doc.select("span[id^=knop]")
             .filter { it.text() == START_LABEL }

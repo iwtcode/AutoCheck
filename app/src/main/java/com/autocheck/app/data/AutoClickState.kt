@@ -23,20 +23,32 @@ object AutoClickState {
     private val _stats = MutableStateFlow(Stats())
     val stats: StateFlow<Stats> = _stats.asStateFlow()
 
+    /** Настройки уведомлений: UI меняет, сервис применяет сразу, без перезапуска. */
+    private val _notificationPrefs = MutableStateFlow(NotificationPrefs())
+    val notificationPrefs: StateFlow<NotificationPrefs> = _notificationPrefs.asStateFlow()
+
     private fun now(): String = LocalTime.now().format(timeFormat)
 
-    fun log(level: LogLevel, message: String) {
-        val entry = LogEntry(counter.incrementAndGet(), now(), level, message)
+    fun log(level: LogLevel, message: String, category: LogCategory) {
+        val entry = LogEntry(counter.incrementAndGet(), now(), level, message, category)
         _logs.update { (it + entry).takeLast(MAX_LOGS) }
     }
 
-    fun info(message: String) = log(LogLevel.INFO, message)
-    fun success(message: String) = log(LogLevel.SUCCESS, message)
-    fun warning(message: String) = log(LogLevel.WARNING, message)
-    fun error(message: String) = log(LogLevel.ERROR, message)
+    fun info(message: String, category: LogCategory = LogCategory.SERVICE) =
+        log(LogLevel.INFO, message, category)
+
+    fun success(message: String, category: LogCategory = LogCategory.SERVICE) =
+        log(LogLevel.SUCCESS, message, category)
+
+    fun warning(message: String) = log(LogLevel.WARNING, message, LogCategory.WARNING)
+    fun error(message: String) = log(LogLevel.ERROR, message, LogCategory.ERROR)
 
     fun setStatus(status: EngineStatus) {
         _status.value = status
+    }
+
+    fun setNotificationPrefs(prefs: NotificationPrefs) {
+        _notificationPrefs.value = prefs
     }
 
     fun onCycleFinished() {

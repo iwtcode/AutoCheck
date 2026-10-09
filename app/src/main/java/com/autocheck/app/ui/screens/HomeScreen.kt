@@ -82,10 +82,10 @@ fun HomeScreen(
         Hero(
             status = status,
             subtitle = when (status) {
-                EngineStatus.STOPPED -> "Нажмите, чтобы начать отмечаться"
-                EngineStatus.CONNECTING -> "Входим в личный кабинет"
+                EngineStatus.STOPPED -> "Нажмите, чтобы запустить автопосещение"
+                EngineStatus.CONNECTING -> "Выполняется вход в личный кабинет"
                 EngineStatus.RUNNING -> "Проверка расписания каждые $timeoutSec с"
-                EngineStatus.ERROR -> "Загляните в журнал"
+                EngineStatus.ERROR -> "Подробности в журнале"
             },
             enabled = hasCredentials || status != EngineStatus.STOPPED,
             onToggle = onToggle,
@@ -115,7 +115,7 @@ fun HomeScreen(
             }
         }
 
-        // Статистика: одна плашка, три колонки — без «россыпи» карточек
+        // Статистика: один блок с тремя колонками
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainer,

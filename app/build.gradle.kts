@@ -4,6 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+layout.buildDirectory.set(rootProject.layout.buildDirectory.dir(project.name))
+
 android {
     namespace = "com.autocheck.app"
     compileSdk = 35

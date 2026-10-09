@@ -42,7 +42,7 @@ fun LogScreen(logs: List<LogEntry>, onClear: () -> Unit) {
         if (logs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Пока пусто",
+                    "Записей пока нет",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

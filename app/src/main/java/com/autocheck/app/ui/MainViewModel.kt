@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.Credentials
+import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.SettingsStore
 import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.service.AutoClickService
@@ -24,6 +25,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var timeout by mutableIntStateOf(initial.timeoutSec)
     var route by mutableStateOf(initial.route)
 
+    /** Настройки уведомлений применяются сразу и не требуют кнопки «Сохранить». */
+    var notifications by mutableStateOf(store.loadNotifications())
+        private set
+
+    init {
+        AutoClickState.setNotificationPrefs(notifications)
+    }
+
     val isDirty: Boolean
         get() = login.trim() != saved.login || password != saved.password || timeout != saved.timeoutSec || route != saved.route
 
@@ -33,6 +42,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun save() {
         saved = Credentials(login.trim(), password, timeout, route)
         store.save(saved)
+    }
+
+    fun updateNotifications(transform: (NotificationPrefs) -> NotificationPrefs) {
+        notifications = transform(notifications)
+        store.saveNotifications(notifications)
+        AutoClickState.setNotificationPrefs(notifications)
     }
 
     fun start() {
