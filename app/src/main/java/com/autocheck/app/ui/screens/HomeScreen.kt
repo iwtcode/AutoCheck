@@ -8,12 +8,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,42 +24,86 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.autocheck.app.data.EngineStatus
 import com.autocheck.app.data.LogEntry
 import com.autocheck.app.data.LogLevel
 import com.autocheck.app.data.Stats
-import com.autocheck.app.ui.theme.Brand
+import com.autocheck.app.ui.components.Banner
+import com.autocheck.app.ui.components.CardShape
+import com.autocheck.app.ui.components.GroupHeader
+import com.autocheck.app.ui.components.GroupedCard
+import com.autocheck.app.ui.components.InsetDivider
+import com.autocheck.app.ui.components.LargeTitle
+import com.autocheck.app.ui.components.LinkText
+import com.autocheck.app.ui.components.iosClickable
+import com.autocheck.app.ui.theme.Ios
 import com.autocheck.app.ui.theme.MonoStyle
 import com.autocheck.app.ui.theme.color
 
-private data class HeroPalette(val from: Color, val to: Color, val title: String)
+/** Цвета героя-карточки для каждого состояния: только плоские заливки, без градиентов. */
+private data class HeroStyle(
+    val bg: Color,
+    val title: Color,
+    val subtitle: Color,
+    val button: Color,
+    val buttonIcon: Color,
+)
 
-private fun EngineStatus.palette() = when (this) {
-    EngineStatus.STOPPED -> HeroPalette(Color(0xFF3B4061), Color(0xFF22263D), "Остановлено")
-    EngineStatus.CONNECTING -> HeroPalette(Brand.BlueLight, Brand.Blue, "Подключение…")
-    EngineStatus.RUNNING -> HeroPalette(Brand.Amber, Brand.DeepOrange, "Работает")
-    EngineStatus.ERROR -> HeroPalette(Color(0xFFD02A45), Color(0xFF7D1630), "Ошибка")
+@Composable
+private fun heroStyle(status: EngineStatus): HeroStyle {
+    val c = Ios.colors
+    return when (status) {
+        // Остановлено: белая/чёрная карточка, оранжевая кнопка запуска
+        EngineStatus.STOPPED -> HeroStyle(
+            bg = c.card,
+            title = c.label,
+            subtitle = c.secondaryLabel,
+            button = c.orange,
+            buttonIcon = Color.White,
+        )
+
+        // Подключение и работа: оранжевая карточка, белая кнопка с оранжевым значком
+        EngineStatus.CONNECTING, EngineStatus.RUNNING -> HeroStyle(
+            bg = c.orange,
+            title = Color.White,
+            subtitle = Color.White.copy(alpha = 0.88f),
+            button = Color.White,
+            buttonIcon = c.orange,
+        )
+
+        // Ошибка: карточка остаётся нейтральной, о сбое говорит красный заголовок; кнопка снова оранжевая
+        EngineStatus.ERROR -> HeroStyle(
+            bg = c.card,
+            title = c.danger,
+            subtitle = c.secondaryLabel,
+            button = c.orange,
+            buttonIcon = Color.White,
+        )
+    }
+}
+
+private fun EngineStatus.title() = when (this) {
+    EngineStatus.STOPPED -> "Остановлено"
+    EngineStatus.CONNECTING -> "Подключение…"
+    EngineStatus.RUNNING -> "Работает"
+    EngineStatus.ERROR -> "Ошибка"
 }
 
 @Composable
@@ -69,17 +113,19 @@ fun HomeScreen(
     recentLogs: List<LogEntry>,
     timeoutSec: Int,
     hasCredentials: Boolean,
+    bottomInset: Dp,
     onToggle: () -> Unit,
     onOpenLog: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Column(
         modifier = Modifier
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text("AutoCheck", style = MaterialTheme.typography.headlineMedium)
+        LargeTitle("AutoCheck")
 
         Hero(
             status = status,
@@ -94,75 +140,39 @@ fun HomeScreen(
         )
 
         if (!hasCredentials) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = onOpenSettings),
-            ) {
-                Row(
-                    Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(
-                        "Укажите логин и пароль от lk.sut.ru в настройках",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
+            Banner(
+                text = "Укажите логин и пароль от lk.sut.ru в настройках",
+                onClick = onOpenSettings,
+            )
         }
 
-        // Статистика: один блок с тремя колонками
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-        ) {
-            Row(Modifier.padding(vertical = 18.dp)) {
-                Stat("Проверок", stats.cycles.toString(), Modifier.weight(1f))
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .height(36.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant)
-                        .align(Alignment.CenterVertically)
-                )
-                Stat("Начато занятий", stats.started.toString(), Modifier.weight(1f))
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .height(36.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant)
-                        .align(Alignment.CenterVertically)
-                )
-                Stat("Последняя", stats.lastCheck ?: "—", Modifier.weight(1f))
-            }
-        }
+        StatsCard(stats)
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Последние события", style = MaterialTheme.typography.titleMedium)
-                TextButton(
-                    onClick = onOpenLog,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.secondary),
-                ) { Text("Весь журнал") }
+                GroupHeader("Последние события")
+                LinkText("Весь журнал", onClick = onOpenLog)
             }
             if (recentLogs.isEmpty()) {
-                Text(
-                    "Здесь появятся события после запуска",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                GroupedCard {
+                    Text(
+                        "Здесь появятся события после запуска",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Ios.colors.secondaryLabel,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+                    )
+                }
             } else {
-                recentLogs.forEach { LogRow(it) }
+                GroupedCard {
+                    recentLogs.forEachIndexed { index, entry ->
+                        if (index > 0) InsetDivider(startInset = 38.dp)
+                        LogRow(entry)
+                    }
+                }
             }
         }
     }
@@ -175,19 +185,25 @@ private fun Hero(
     enabled: Boolean,
     onToggle: () -> Unit,
 ) {
-    val target = status.palette()
-    val from by animateColorAsState(target.from, tween(700), label = "from")
-    val to by animateColorAsState(target.to, tween(700), label = "to")
+    val target = heroStyle(status)
+    val spec = tween<Color>(400)
+    val bg by animateColorAsState(target.bg, spec, label = "bg")
+    val titleColor by animateColorAsState(target.title, spec, label = "title")
+    val subtitleColor by animateColorAsState(target.subtitle, spec, label = "subtitle")
+    val buttonColor by animateColorAsState(target.button, spec, label = "button")
+    val buttonIcon by animateColorAsState(target.buttonIcon, spec, label = "buttonIcon")
+
     val active = status == EngineStatus.RUNNING || status == EngineStatus.CONNECTING
 
+    // Кольцо-пульс вокруг кнопки, пока приложение работает
     val pulse = rememberInfiniteTransition(label = "pulse")
     val scale by pulse.animateFloat(
-        initialValue = 1f, targetValue = 1.75f,
+        initialValue = 1f, targetValue = 1.6f,
         animationSpec = infiniteRepeatable(tween(2000, easing = LinearOutSlowInEasing), RepeatMode.Restart),
         label = "scale",
     )
     val ringAlpha by pulse.animateFloat(
-        initialValue = 0.4f, targetValue = 0f,
+        initialValue = 0.35f, targetValue = 0f,
         animationSpec = infiniteRepeatable(tween(2000), RepeatMode.Restart),
         label = "alpha",
     )
@@ -195,9 +211,9 @@ private fun Hero(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(36.dp))
-            .background(Brush.linearGradient(listOf(from, to)))
-            .padding(vertical = 36.dp, horizontal = 24.dp),
+            .clip(RoundedCornerShape(32.dp))
+            .background(bg)
+            .padding(vertical = 32.dp, horizontal = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -205,7 +221,7 @@ private fun Hero(
                 if (active) {
                     Box(
                         Modifier
-                            .size(112.dp)
+                            .size(116.dp)
                             .graphicsLayer {
                                 scaleX = scale
                                 scaleY = scale
@@ -215,35 +231,66 @@ private fun Hero(
                     )
                 }
                 Box(
-                    Modifier
-                        .size(112.dp)
+                    modifier = Modifier
+                        .iosClickable(enabled = enabled, pressedScale = 0.94f, onClick = onToggle)
+                        .alpha(if (enabled) 1f else 0.4f)
+                        .size(116.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = if (enabled) 1f else 0.4f))
-                        .clickable(enabled = enabled, role = Role.Button, onClick = onToggle),
+                        .background(buttonColor),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = if (active) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
                         contentDescription = if (active) "Остановить" else "Запустить",
-                        tint = to,
+                        tint = buttonIcon,
                         modifier = Modifier.size(56.dp),
                     )
                 }
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                target.title,
+                status.title(),
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
+                color = titleColor,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.92f),
+                color = subtitleColor,
             )
         }
     }
+}
+
+/** Статистика: одна карточка с тремя колонками. Все значения одного цвета — основного текста. */
+@Composable
+private fun StatsCard(stats: Stats) {
+    val c = Ios.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardShape)
+            .background(c.card)
+            .padding(vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Stat("Проверок", stats.cycles.toString(), Modifier.weight(1f))
+        StatDivider()
+        Stat("Начато занятий", stats.started.toString(), Modifier.weight(1f))
+        StatDivider()
+        Stat("Последняя", stats.lastCheck ?: "—", Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun StatDivider() {
+    Box(
+        Modifier
+            .width(1.dp)
+            .height(36.dp)
+            .background(Ios.colors.separator)
+    )
 }
 
 @Composable
@@ -251,42 +298,48 @@ private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             value,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.secondary,
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            color = Ios.colors.label,
             maxLines = 1,
+            softWrap = false,
         )
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Ios.colors.secondaryLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
+/** Строка журнала: цветная точка уровня, сообщение и время. Используется на главной и в «Журнале». */
 @Composable
 fun LogRow(entry: LogEntry, modifier: Modifier = Modifier) {
+    val c = Ios.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             Modifier
-                .padding(top = 6.dp)
-                .size(8.dp)
+                .padding(top = 7.dp)
+                .size(10.dp)
                 .background(entry.level.color(), CircleShape)
         )
-        Column {
-            Text(entry.time, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 entry.message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (entry.level == LogLevel.INFO) MaterialTheme.colorScheme.onSurface else entry.level.color(),
-                fontWeight = if (entry.level == LogLevel.SUCCESS) FontWeight.Medium else null,
+                color = if (entry.level == LogLevel.ERROR) c.danger else c.label,
+                fontWeight = when (entry.level) {
+                    LogLevel.SUCCESS, LogLevel.ERROR -> FontWeight.Medium
+                    else -> null
+                },
             )
+            Text(entry.time, style = MonoStyle, color = c.secondaryLabel)
         }
     }
 }

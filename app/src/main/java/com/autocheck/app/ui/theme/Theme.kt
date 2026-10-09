@@ -2,14 +2,13 @@ package com.autocheck.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -19,67 +18,110 @@ import androidx.compose.ui.unit.sp
 import com.autocheck.app.data.LogLevel
 import com.autocheck.app.data.ThemeMode
 
-/** Фирменные цвета: жёлто-оранжевый градиент и дополнительный синий. */
+/**
+ * Палитра в духе iOS 27: чистая и плоская, без градиентов, теней и бликов. Правило 60–30–10:
+ *  • 60 % — нейтральный: белый (светлая тема) / чёрный (тёмная тема) — фон, карточки, текст;
+ *  • 30 % — оранжевый: значки разделов, главная карточка, кнопки действий;
+ *  • 10 % — голубой: интерактивные состояния — переключатели, слайдер, ссылки, выбранная вкладка, галочки.
+ * На одном логическом уровне всегда один цвет: все значки разделов оранжевые, все ссылки голубые.
+ */
 object Brand {
-    val Yellow = Color(0xFFFFC21A)
-    val Amber = Color(0xFFFFA11A)
-    val Orange = Color(0xFFFF6B00)
-    val DeepOrange = Color(0xFFF2560A)
-
-    /** Дополнительный цвет. */
-    val Blue = Color(0xFF3666FF)
-    val BlueLight = Color(0xFF5E8AFF)
+    val Orange = Color(0xFFFF8A00)
+    val Sky = Color(0xFF14B1FF)
 }
 
-private val LightColors = lightColorScheme(
-    primary = Color(0xFFE65F00),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFE3CC),
-    onPrimaryContainer = Color(0xFF4A1E00),
-    secondary = Brand.Blue,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDDE5FF),
-    onSecondaryContainer = Color(0xFF0A2270),
-    background = Color(0xFFF5F6FA),
-    onBackground = Color(0xFF14161F),
-    surface = Color(0xFFF5F6FA),
-    onSurface = Color(0xFF14161F),
-    surfaceVariant = Color(0xFFE8EAF3),
-    onSurfaceVariant = Color(0xFF50556B),
-    surfaceContainer = Color.White,
-    surfaceContainerHigh = Color(0xFFEEF0F8),
-    outlineVariant = Color(0xFFD5D8E6),
-    error = Color(0xFFC62840),
+/** Семантические цвета интерфейса. Получать через [Ios.colors]. */
+@Immutable
+data class IosColors(
+    val isDark: Boolean,
+    /** Фон экрана. */
+    val background: Color,
+    /** Фон карточек и сгруппированных списков. */
+    val card: Color,
+    val label: Color,
+    val secondaryLabel: Color,
+    val tertiaryLabel: Color,
+    val separator: Color,
+    /** Заливка вторичных элементов: дорожка слайдера, нажатая строка. */
+    val fill: Color,
+    /** Дорожка слайдера и выключенный переключатель. */
+    val track: Color,
+    /** Плавающие элементы (панель вкладок, «Сохранить», круглые кнопки): сплошная заливка. */
+    val bar: Color,
+    /** Тонкая кромка плавающих элементов вместо тени. */
+    val edge: Color,
+    /** Акцентный голубой для заливок и элементов управления. */
+    val accent: Color,
+    /** Голубой для текста и значков: чуть темнее в светлой теме, чтобы читался на белом. */
+    val accentText: Color,
+    val orange: Color,
+    val success: Color,
+    val danger: Color,
 )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFFFB067),
-    onPrimary = Color(0xFF4A2000),
-    primaryContainer = Color(0xFF6B3200),
-    onPrimaryContainer = Color(0xFFFFE0C7),
-    secondary = Color(0xFF8FA9FF),
-    onSecondary = Color(0xFF0A1F6B),
-    secondaryContainer = Color(0xFF1F3794),
-    onSecondaryContainer = Color(0xFFDCE4FF),
-    background = Color(0xFF0E1016),
-    onBackground = Color(0xFFE6E8F2),
-    surface = Color(0xFF0E1016),
-    onSurface = Color(0xFFE6E8F2),
-    surfaceVariant = Color(0xFF232736),
-    onSurfaceVariant = Color(0xFFA7ACC2),
-    surfaceContainer = Color(0xFF171A24),
-    surfaceContainerHigh = Color(0xFF1F2330),
-    outlineVariant = Color(0xFF2E3345),
-    error = Color(0xFFFF7A8A),
+private val LightIos = IosColors(
+    isDark = false,
+    background = Color(0xFFF2F2F7),
+    card = Color(0xFFFFFFFF),
+    label = Color(0xFF000000),
+    secondaryLabel = Color(0xFF6C6C70),
+    tertiaryLabel = Color(0xFFAEAEB2),
+    separator = Color(0xFFE5E5EA),
+    fill = Color(0xFFE9E9EE),
+    track = Color(0xFFD9D9DE),
+    bar = Color(0xFFFFFFFF),
+    edge = Color(0x1A000000),
+    accent = Brand.Sky,
+    accentText = Color(0xFF0A8FE6),
+    orange = Brand.Orange,
+    success = Color(0xFF1FA55A),
+    danger = Color(0xFFE0303F),
 )
 
-private val AppTypography = Typography().run {
-    copy(
-        headlineMedium = headlineMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold),
-        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
-    )
+private val DarkIos = IosColors(
+    isDark = true,
+    background = Color(0xFF000000),
+    card = Color(0xFF1C1C1E),
+    label = Color(0xFFFFFFFF),
+    secondaryLabel = Color(0xFF98989F),
+    tertiaryLabel = Color(0xFF636366),
+    separator = Color(0xFF38383A),
+    fill = Color(0xFF2C2C2E),
+    track = Color(0xFF3A3A3C),
+    bar = Color(0xFF1C1C1E),
+    edge = Color(0x1AFFFFFF),
+    accent = Color(0xFF2DB9FF),
+    accentText = Color(0xFF4FC6FF),
+    orange = Color(0xFFFF9A1F),
+    success = Color(0xFF34D27B),
+    danger = Color(0xFFFF6B77),
+)
+
+private val LocalIosColors = staticCompositionLocalOf { LightIos }
+
+/** Доступ к цветам текущей темы: `Ios.colors.card`, `Ios.colors.accent` и т. д. */
+object Ios {
+    val colors: IosColors
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalIosColors.current
 }
+
+/** Шрифтовая шкала iOS (Large Title 34, Title 28/22/20, Headline 17, Body 17, Subheadline 15, Footnote 13, Caption 11). */
+private val AppTypography = Typography(
+    displaySmall = TextStyle(fontSize = 34.sp, lineHeight = 41.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp),
+    headlineSmall = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontSize = 17.sp, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Medium),
+)
 
 val MonoStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 
@@ -94,48 +136,52 @@ fun ThemeMode.isDark(): Boolean = when (this) {
     ThemeMode.DARK -> true
 }
 
+private fun IosColors.toMaterial() =
+    (if (isDark) darkColorScheme() else lightColorScheme()).copy(
+        primary = accent,
+        onPrimary = Color.White,
+        primaryContainer = accent.copy(alpha = 0.18f),
+        onPrimaryContainer = accentText,
+        secondary = orange,
+        onSecondary = Color.White,
+        secondaryContainer = orange.copy(alpha = 0.18f),
+        onSecondaryContainer = orange,
+        background = background,
+        onBackground = label,
+        surface = background,
+        onSurface = label,
+        surfaceVariant = fill,
+        onSurfaceVariant = secondaryLabel,
+        surfaceContainer = card,
+        surfaceContainerHigh = fill,
+        outline = separator,
+        outlineVariant = separator,
+        error = danger,
+    )
+
 @Composable
 fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+    val colors = if (darkTheme) DarkIos else LightIos
+    CompositionLocalProvider(
+        LocalIosColors provides colors,
+        LocalDarkTheme provides darkTheme,
+    ) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkColors else LightColors,
+            colorScheme = colors.toMaterial(),
             typography = AppTypography,
             content = content,
         )
     }
 }
 
-// Оранжевый — основные действия и состояние, синий — элементы управления и навигация
-
-@Composable
-fun accentSwitchColors() = SwitchDefaults.colors(
-    checkedTrackColor = MaterialTheme.colorScheme.secondary,
-    checkedThumbColor = MaterialTheme.colorScheme.onSecondary,
-    checkedBorderColor = MaterialTheme.colorScheme.secondary,
-)
-
-@Composable
-fun accentSliderColors() = SliderDefaults.colors(
-    thumbColor = MaterialTheme.colorScheme.secondary,
-    activeTrackColor = MaterialTheme.colorScheme.secondary,
-    inactiveTrackColor = MaterialTheme.colorScheme.secondaryContainer,
-    activeTickColor = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.38f),
-    inactiveTickColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.38f),
-)
-
-@Composable
-fun accentRadioColors() = RadioButtonDefaults.colors(
-    selectedColor = MaterialTheme.colorScheme.secondary,
-)
-
-/** Цвет точки/текста уровня лога. */
+/** Цвет точки уровня лога: серый — инфо, зелёный — успех, оранжевый — предупреждение, красный — ошибка. */
 @Composable
 fun LogLevel.color(): Color {
-    val dark = LocalDarkTheme.current
+    val c = Ios.colors
     return when (this) {
-        LogLevel.INFO -> MaterialTheme.colorScheme.secondary
-        LogLevel.SUCCESS -> if (dark) Color(0xFF5EDC9A) else Color(0xFF14833F)
-        LogLevel.WARNING -> if (dark) Color(0xFFFFC857) else Color(0xFFB36B00)
-        LogLevel.ERROR -> MaterialTheme.colorScheme.error
+        LogLevel.INFO -> c.secondaryLabel
+        LogLevel.SUCCESS -> c.success
+        LogLevel.WARNING -> c.orange
+        LogLevel.ERROR -> c.danger
     }
 }

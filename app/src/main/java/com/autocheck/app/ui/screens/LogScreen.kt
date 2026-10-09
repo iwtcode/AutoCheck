@@ -1,60 +1,100 @@
 package com.autocheck.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.autocheck.app.data.LogEntry
+import com.autocheck.app.ui.components.IconTile
+import com.autocheck.app.ui.components.InsetDivider
+import com.autocheck.app.ui.components.LargeTitle
+import com.autocheck.app.ui.components.RoundIconButton
+import com.autocheck.app.ui.theme.Ios
 
-/** Журнал: новые записи сверху. */
+private val GroupRadius = 26.dp
+
+/** Журнал: новые записи сверху, записи сгруппированы в одну скруглённую карточку. */
 @Composable
-fun LogScreen(logs: List<LogEntry>, onClear: () -> Unit) {
+fun LogScreen(logs: List<LogEntry>, bottomInset: Dp, onClear: () -> Unit) {
+    val c = Ios.colors
+
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Журнал", style = MaterialTheme.typography.headlineMedium)
-            IconButton(onClick = onClear, enabled = logs.isNotEmpty()) {
-                Icon(Icons.Rounded.DeleteSweep, contentDescription = "Очистить журнал")
-            }
-        }
+        LargeTitle(
+            text = "Журнал",
+            modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+            trailing = {
+                RoundIconButton(
+                    icon = Icons.Rounded.DeleteSweep,
+                    contentDescription = "Очистить журнал",
+                    onClick = onClear,
+                    enabled = logs.isNotEmpty(),
+                )
+            },
+        )
 
         if (logs.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Записей пока нет",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(bottom = bottomInset),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    IconTile(Icons.Rounded.History, size = 56.dp)
+                    Text(
+                        "Записей пока нет",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = c.secondaryLabel,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomInset),
             ) {
-                items(logs, key = { it.id }) { entry ->
-                    LogRow(entry)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                itemsIndexed(logs, key = { _, entry -> entry.id }) { index, entry ->
+                    val first = index == 0
+                    val last = index == logs.lastIndex
+                    // Скругляем только верх первой и низ последней записи — получается одна карточка
+                    val shape = RoundedCornerShape(
+                        topStart = if (first) GroupRadius else 0.dp,
+                        topEnd = if (first) GroupRadius else 0.dp,
+                        bottomStart = if (last) GroupRadius else 0.dp,
+                        bottomEnd = if (last) GroupRadius else 0.dp,
+                    )
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(shape)
+                            .background(c.card)
+                    ) {
+                        if (!first) InsetDivider(startInset = 38.dp)
+                        LogRow(entry)
+                    }
                 }
             }
         }

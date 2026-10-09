@@ -6,49 +6,58 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BatteryChargingFull
-import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,13 +67,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -72,14 +91,33 @@ import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.ui.MainViewModel
-import com.autocheck.app.ui.theme.accentRadioColors
-import com.autocheck.app.ui.theme.accentSliderColors
-import com.autocheck.app.ui.theme.accentSwitchColors
+import com.autocheck.app.ui.components.Banner
+import com.autocheck.app.ui.components.GroupFooter
+import com.autocheck.app.ui.components.GroupHeader
+import com.autocheck.app.ui.components.GroupedCard
+import com.autocheck.app.ui.components.IconTile
+import com.autocheck.app.ui.components.InsetDivider
+import com.autocheck.app.ui.components.IosSlider
+import com.autocheck.app.ui.components.IosSwitch
+import com.autocheck.app.ui.components.LargeTitle
+import com.autocheck.app.ui.components.PillButton
+import com.autocheck.app.ui.components.RoundIconButton
+import com.autocheck.app.ui.components.floating
+import com.autocheck.app.ui.components.iosClickable
+import com.autocheck.app.ui.components.pressHighlight
+import com.autocheck.app.ui.theme.Brand
+import com.autocheck.app.ui.theme.Ios
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private const val CHECK_ATTEMPTS = 10
 private const val CHECK_INTERVAL_MS = 500L
+
+/** Высота плавающей панели «Сохранить» вместе с отступом. */
+private val SaveBarSpace: Dp = 84.dp
+
+/** Нижний отступ прокручиваемых страниц: место под панель вкладок и, при необходимости, панель «Сохранить». */
+private val LocalContentBottom = compositionLocalOf { 0.dp }
 
 /** Разделы настроек. Главная страница настроек — список этих разделов. */
 private enum class SettingsPage(val title: String, val icon: ImageVector) {
@@ -91,7 +129,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
 }
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, running: Boolean) {
+fun SettingsScreen(vm: MainViewModel, running: Boolean, bottomInset: Dp) {
     val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var ignoringBattery by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
@@ -120,38 +158,60 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean) {
     val showSaveBar = vm.isDirty &&
         (page == null || page == SettingsPage.Account || page == SettingsPage.Connection)
 
-    Column(Modifier.fillMaxSize()) {
-        Crossfade(
-            targetState = page,
-            label = "settings-page",
-            modifier = Modifier.weight(1f),
-        ) { current ->
-            when (current) {
-                null -> SettingsHub(
-                    vm = vm,
-                    ignoringBattery = ignoringBattery,
-                    onOpen = { page = it },
-                )
+    val contentBottom = if (showSaveBar) bottomInset + SaveBarSpace else bottomInset
 
-                SettingsPage.Account -> AccountPage(vm, onBack = { page = null })
-                SettingsPage.Connection -> ConnectionPage(vm, onBack = { page = null })
-                SettingsPage.Notifications -> NotificationsPage(
-                    vm = vm,
-                    notificationsAllowed = notificationsAllowed,
-                    onBack = { page = null },
-                )
+    CompositionLocalProvider(LocalContentBottom provides contentBottom) {
+        Box(Modifier.fillMaxSize()) {
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = {
+                    if (initialState == null && targetState != null) {
+                        // Открываем раздел: страница выезжает справа, как в навигации iOS
+                        (slideInHorizontally(tween(320)) { it / 3 } + fadeIn(tween(320))) togetherWith
+                            (slideOutHorizontally(tween(320)) { -it / 4 } + fadeOut(tween(200)))
+                    } else {
+                        // Возвращаемся к списку
+                        (slideInHorizontally(tween(320)) { -it / 4 } + fadeIn(tween(320))) togetherWith
+                            (slideOutHorizontally(tween(320)) { it / 3 } + fadeOut(tween(200)))
+                    }
+                },
+                label = "settings-page",
+                modifier = Modifier.fillMaxSize(),
+            ) { current ->
+                when (current) {
+                    null -> SettingsHub(
+                        vm = vm,
+                        ignoringBattery = ignoringBattery,
+                        onOpen = { page = it },
+                    )
 
-                SettingsPage.Appearance -> AppearancePage(vm, onBack = { page = null })
+                    SettingsPage.Account -> AccountPage(vm, onBack = { page = null })
+                    SettingsPage.Connection -> ConnectionPage(vm, onBack = { page = null })
+                    SettingsPage.Notifications -> NotificationsPage(
+                        vm = vm,
+                        notificationsAllowed = notificationsAllowed,
+                        onBack = { page = null },
+                    )
 
-                SettingsPage.Background -> BackgroundPage(
-                    ignoringBattery = ignoringBattery,
-                    onBack = { page = null },
-                )
+                    SettingsPage.Appearance -> AppearancePage(vm, onBack = { page = null })
+
+                    SettingsPage.Background -> BackgroundPage(
+                        ignoringBattery = ignoringBattery,
+                        onBack = { page = null },
+                    )
+                }
             }
-        }
 
-        if (showSaveBar) {
-            SaveBar(onSave = vm::save, running = running)
+            AnimatedVisibility(
+                visible = showSaveBar,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomInset),
+                enter = fadeIn(tween(200)) + slideInVertically(tween(260)) { it / 2 },
+                exit = fadeOut(tween(160)) + slideOutVertically(tween(200)) { it / 2 },
+            ) {
+                SaveBar(onSave = vm::save, running = running)
+            }
         }
     }
 }
@@ -161,26 +221,17 @@ fun SettingsScreen(vm: MainViewModel, running: Boolean) {
 @Composable
 private fun SettingsHub(vm: MainViewModel, ignoringBattery: Boolean, onOpen: (SettingsPage) -> Unit) {
     PageScaffold {
-        Text(
-            "Настройки",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(start = 4.dp),
-        )
+        LargeTitle("Настройки")
 
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-        ) {
-            Column {
-                SettingsPage.entries.forEachIndexed { index, item ->
-                    if (index > 0) GroupDivider()
-                    NavRow(
-                        icon = item.icon,
-                        title = item.title,
-                        summary = summaryOf(item, vm, ignoringBattery),
-                        onClick = { onOpen(item) },
-                    )
-                }
+        GroupedCard {
+            SettingsPage.entries.forEachIndexed { index, item ->
+                if (index > 0) InsetDivider(startInset = 62.dp)
+                NavRow(
+                    icon = item.icon,
+                    title = item.title,
+                    summary = summaryOf(item, vm, ignoringBattery),
+                    onClick = { onOpen(item) },
+                )
             }
         }
     }
@@ -208,97 +259,89 @@ private fun AccountPage(vm: MainViewModel, onBack: () -> Unit) {
     PageScaffold {
         PageHeader("Аккаунт", onBack)
 
-        Section(
-            title = "Вход в lk.sut.ru",
-            hint = "Данные хранятся на устройстве в зашифрованном виде.",
-        ) {
-            OutlinedTextField(
-                value = vm.login,
-                onValueChange = { vm.login = it },
-                label = { Text("Логин") },
-                leadingIcon = { Icon(Icons.Rounded.Person, null) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = vm.password,
-                onValueChange = { vm.password = it },
-                label = { Text("Пароль") },
-                leadingIcon = { Icon(Icons.Rounded.Lock, null) },
-                trailingIcon = {
-                    IconButton(onClick = { showPassword = !showPassword }) {
-                        Icon(
-                            if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                            contentDescription = if (showPassword) "Скрыть пароль" else "Показать пароль",
-                        )
-                    }
-                },
-                singleLine = true,
-                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Вход в lk.sut.ru")
+            GroupedCard {
+                FieldRow(
+                    label = "Логин",
+                    placeholder = "Введите логин",
+                    value = vm.login,
+                    onValueChange = { vm.login = it },
+                    keyboardType = KeyboardType.Email,
+                )
+                InsetDivider()
+                FieldRow(
+                    label = "Пароль",
+                    placeholder = "Введите пароль",
+                    value = vm.password,
+                    onValueChange = { vm.password = it },
+                    keyboardType = KeyboardType.Password,
+                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailing = {
+                        Box(
+                            Modifier
+                                .iosClickable(pressedScale = 0.88f) { showPassword = !showPassword }
+                                .size(36.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                contentDescription = if (showPassword) "Скрыть пароль" else "Показать пароль",
+                                tint = Ios.colors.secondaryLabel,
+                            )
+                        }
+                    },
+                )
+            }
+            GroupFooter("Данные хранятся на устройстве в зашифрованном виде.")
         }
     }
 }
 
 @Composable
 private fun ConnectionPage(vm: MainViewModel, onBack: () -> Unit) {
+    val c = Ios.colors
+
     PageScaffold {
         PageHeader("Подключение", onBack)
 
-        Section(
-            title = "Маршрут трафика",
-            hint = "Режимы «без VPN» не сработают, если в настройках VPN включена блокировка соединений без VPN. " +
-                "Если выбранной сети нет, запрос не отправляется и будет повторён при следующей проверке.",
-        ) {
-            Column {
-                TrafficRoute.entries.forEach { option ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .selectable(
-                                selected = vm.route == option,
-                                onClick = { vm.route = option },
-                                role = Role.RadioButton,
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        RadioButton(selected = vm.route == option, onClick = null, colors = accentRadioColors())
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(option.title, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                option.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Маршрут трафика")
+            GroupedCard {
+                TrafficRoute.entries.forEachIndexed { index, option ->
+                    if (index > 0) InsetDivider()
+                    OptionRow(
+                        selected = vm.route == option,
+                        title = option.title,
+                        description = option.description,
+                        onClick = { vm.route = option },
+                    )
                 }
             }
+            GroupFooter(
+                "Режимы «без VPN» не сработают, если в настройках VPN включена блокировка соединений без VPN. " +
+                    "Если выбранной сети нет, запрос не отправляется и будет повторён при следующей проверке."
+            )
         }
 
-        Section(
-            title = "Интервал проверки",
-            hint = "Как часто приложение проверяет расписание. Чем меньше значение, тем быстрее срабатывает " +
-                "автопосещение и тем выше расход батареи.",
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Каждые", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${vm.timeout} сек", style = MaterialTheme.typography.titleMedium)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Интервал проверки")
+            GroupedCard {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Каждые", style = MaterialTheme.typography.bodyLarge, color = c.secondaryLabel)
+                        Text("${vm.timeout} сек", style = MaterialTheme.typography.titleMedium, color = c.accentText)
+                    }
+                    IosSlider(
+                        value = vm.timeout.toFloat(),
+                        onValueChange = { vm.timeout = (it / 5).roundToInt() * 5 },
+                        valueRange = 5f..300f,
+                    )
+                }
             }
-            Slider(
-                value = vm.timeout.toFloat(),
-                onValueChange = { vm.timeout = (it / 5).roundToInt() * 5 },
-                valueRange = 5f..300f,
-                steps = 58,
-                colors = accentSliderColors(),
+            GroupFooter(
+                "Как часто приложение проверяет расписание. Чем меньше значение, тем быстрее срабатывает " +
+                    "автопосещение и тем выше расход батареи."
             )
         }
     }
@@ -313,89 +356,71 @@ private fun NotificationsPage(vm: MainViewModel, notificationsAllowed: Boolean, 
         PageHeader("Уведомления", onBack)
 
         if (!notificationsAllowed) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Row(
-                    Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        "Уведомления отключены в настройках Android",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { openNotificationSettings(context) }) { Text("Открыть") }
-                }
+            Banner(
+                text = "Уведомления отключены в настройках Android",
+                actionLabel = "Открыть",
+                onClick = { openNotificationSettings(context) },
+            )
+        }
+
+        GroupFooter(
+            "Приложение показывает одно уведомление. Оно обновляется на месте, новые не создаются. " +
+                "Ниже выберите, какие события отображаются в его тексте."
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("События в уведомлении")
+            GroupedCard {
+                SwitchRow(
+                    title = "Занятие начато",
+                    description = "Когда приложение успешно начало занятие.",
+                    checked = prefs.lessonStarted,
+                    onCheckedChange = { on -> vm.updateNotifications { it.copy(lessonStarted = on) } },
+                )
+                InsetDivider()
+                SwitchRow(
+                    title = "Ошибки",
+                    description = "Сбои подключения, неверный логин или пароль.",
+                    checked = prefs.errors,
+                    onCheckedChange = { on -> vm.updateNotifications { it.copy(errors = on) } },
+                )
+                InsetDivider()
+                SwitchRow(
+                    title = "Предупреждения",
+                    description = "Например, истёкшая сессия, из-за которой нужен повторный вход.",
+                    checked = prefs.warnings,
+                    onCheckedChange = { on -> vm.updateNotifications { it.copy(warnings = on) } },
+                )
+                InsetDivider()
+                SwitchRow(
+                    title = "Результат каждой проверки",
+                    description = "Например, «Нет активных занятий». Уведомление будет обновляться при каждой проверке.",
+                    checked = prefs.checks,
+                    onCheckedChange = { on -> vm.updateNotifications { it.copy(checks = on) } },
+                )
+                InsetDivider()
+                SwitchRow(
+                    title = "Служебные сообщения",
+                    description = "Вход в кабинет, смена сети, запуск и остановка.",
+                    checked = prefs.service,
+                    onCheckedChange = { on -> vm.updateNotifications { it.copy(service = on) } },
+                )
             }
         }
 
-        Text(
-            "Приложение показывает одно уведомление. Оно обновляется на месте, новые не создаются. " +
-                "Ниже выберите, какие события отображаются в его тексте.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-
-        GroupLabel("События в уведомлении")
-        SettingsGroup {
-            SwitchRow(
-                title = "Занятие начато",
-                description = "Когда приложение успешно начало занятие.",
-                checked = prefs.lessonStarted,
-                onCheckedChange = { on -> vm.updateNotifications { it.copy(lessonStarted = on) } },
-            )
-            GroupDivider()
-            SwitchRow(
-                title = "Ошибки",
-                description = "Сбои подключения, неверный логин или пароль.",
-                checked = prefs.errors,
-                onCheckedChange = { on -> vm.updateNotifications { it.copy(errors = on) } },
-            )
-            GroupDivider()
-            SwitchRow(
-                title = "Предупреждения",
-                description = "Например, истёкшая сессия, из-за которой нужен повторный вход.",
-                checked = prefs.warnings,
-                onCheckedChange = { on -> vm.updateNotifications { it.copy(warnings = on) } },
-            )
-            GroupDivider()
-            SwitchRow(
-                title = "Результат каждой проверки",
-                description = "Например, «Нет активных занятий». Уведомление будет обновляться при каждой проверке.",
-                checked = prefs.checks,
-                onCheckedChange = { on -> vm.updateNotifications { it.copy(checks = on) } },
-            )
-            GroupDivider()
-            SwitchRow(
-                title = "Служебные сообщения",
-                description = "Вход в кабинет, смена сети, запуск и остановка.",
-                checked = prefs.service,
-                onCheckedChange = { on -> vm.updateNotifications { it.copy(service = on) } },
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Управление")
+            GroupedCard {
+                SwitchRow(
+                    title = "Кнопка «Включить» после остановки",
+                    description = "После остановки уведомление остаётся в шторке, и проверку можно снова " +
+                        "запустить прямо из него. Уведомление можно смахнуть.",
+                    checked = prefs.controlWhenStopped,
+                    onCheckedChange = { on -> vm.updateNotifications { it.copy(controlWhenStopped = on) } },
+                )
+            }
+            GroupFooter("Изменения применяются сразу. Пока приложение работает, в уведомлении есть кнопка «Остановить».")
         }
-
-        GroupLabel("Управление")
-        SettingsGroup {
-            SwitchRow(
-                title = "Кнопка «Включить» после остановки",
-                description = "После остановки уведомление остаётся в шторке, и проверку можно снова " +
-                    "запустить прямо из него. Уведомление можно смахнуть.",
-                checked = prefs.controlWhenStopped,
-                onCheckedChange = { on -> vm.updateNotifications { it.copy(controlWhenStopped = on) } },
-            )
-        }
-
-        Text(
-            "Изменения применяются сразу. Пока приложение работает, в уведомлении есть кнопка «Остановить».",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
     }
 }
 
@@ -404,20 +429,25 @@ private fun AppearancePage(vm: MainViewModel, onBack: () -> Unit) {
     PageScaffold {
         PageHeader("Оформление", onBack)
 
-        Section(
-            title = "Тема",
-            hint = "Изменение применяется сразу.",
-        ) {
-            Column {
-                ThemeMode.entries.forEach { option ->
-                    OptionRow(
-                        selected = vm.themeMode == option,
-                        title = option.title,
-                        description = option.description,
-                        onClick = { vm.updateThemeMode(option) },
-                    )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Тема")
+            GroupedCard {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    ThemeMode.entries.forEach { option ->
+                        ThemeSwatch(
+                            mode = option,
+                            selected = vm.themeMode == option,
+                            onClick = { vm.updateThemeMode(option) },
+                        )
+                    }
                 }
             }
+            GroupFooter("${vm.themeMode.description} Изменение применяется сразу.")
         }
     }
 }
@@ -425,19 +455,31 @@ private fun AppearancePage(vm: MainViewModel, onBack: () -> Unit) {
 @Composable
 private fun BackgroundPage(ignoringBattery: Boolean, onBack: () -> Unit) {
     val context = LocalContext.current
+    val c = Ios.colors
 
     PageScaffold {
         PageHeader("Работа в фоне", onBack)
 
-        Section(
-            title = "Оптимизация батареи",
-            hint = "Android может ограничивать работу приложений при выключенном экране. " +
-                "Исключите AutoCheck из оптимизации батареи, чтобы проверки не прерывались.",
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Оптимизация батареи")
             if (ignoringBattery) {
-                Text("Оптимизация батареи отключена ✓", color = MaterialTheme.colorScheme.secondary)
+                GroupedCard {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = c.success)
+                        Text(
+                            "Оптимизация батареи отключена",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = c.label,
+                        )
+                    }
+                }
             } else {
-                OutlinedButton(
+                PillButton(
+                    text = "Отключить оптимизацию батареи",
                     onClick = {
                         context.startActivity(
                             Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
@@ -445,8 +487,12 @@ private fun BackgroundPage(ignoringBattery: Boolean, onBack: () -> Unit) {
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Отключить оптимизацию батареи") }
+                )
             }
+            GroupFooter(
+                "Android может ограничивать работу приложений при выключенном экране. " +
+                    "Исключите AutoCheck из оптимизации батареи, чтобы проверки не прерывались."
+            )
         }
     }
 }
@@ -455,103 +501,181 @@ private fun BackgroundPage(ignoringBattery: Boolean, onBack: () -> Unit) {
 
 /** Прокручиваемая страница с едиными отступами. */
 @Composable
-private fun PageScaffold(content: @Composable () -> Unit) {
+private fun PageScaffold(content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        content()
-    }
+            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = LocalContentBottom.current),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        content = content,
+    )
 }
 
+/** Верхняя панель вложенной страницы: круглая кнопка «Назад» и заголовок по центру. */
 @Composable
 private fun PageHeader(title: String, onBack: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
-        }
-        Text(title, style = MaterialTheme.typography.headlineSmall)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(44.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        RoundIconButton(
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
+            contentDescription = "Назад",
+            onClick = onBack,
+            modifier = Modifier.align(Alignment.CenterStart),
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = Ios.colors.label,
+        )
     }
 }
 
-/** Панель «Сохранить» закреплена внизу, пока есть несохранённые изменения. */
+/** Панель «Сохранить»: плоская плавающая капсула над панелью вкладок, пока есть несохранённые изменения. */
 @Composable
 private fun SaveBar(onSave: () -> Unit, running: Boolean) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
+    val c = Ios.colors
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp)
+            .floating(RoundedCornerShape(32.dp))
+            .padding(start = 20.dp, top = 10.dp, bottom = 10.dp, end = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Есть несохранённые изменения",
+                style = MaterialTheme.typography.titleSmall,
+                color = c.label,
+            )
+            if (running) {
                 Text(
-                    "Есть несохранённые изменения",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    "Применятся при следующем запуске",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.secondaryLabel,
                 )
-                if (running) {
-                    Text(
-                        "Применятся при следующем запуске",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
             }
-            Button(onClick = onSave, shape = RoundedCornerShape(14.dp)) { Text("Сохранить") }
         }
+        PillButton(text = "Сохранить", onClick = onSave, height = 44.dp)
     }
 }
 
-/** Строка с радиокнопкой: название и пояснение. */
+/** Строка формы: подпись слева, поле ввода справа. */
+@Composable
+private fun FieldRow(
+    label: String,
+    placeholder: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType,
+    modifier: Modifier = Modifier,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val c = Ios.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 52.dp)
+            .padding(start = 16.dp, end = if (trailing != null) 8.dp else 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = c.label,
+            modifier = Modifier.width(76.dp),
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.label),
+            cursorBrush = SolidColor(c.accent),
+            visualTransformation = visualTransformation,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = c.tertiaryLabel,
+                        )
+                    }
+                    inner()
+                }
+            },
+        )
+        if (trailing != null) trailing()
+    }
+}
+
+/** Строка выбора: название, пояснение и галочка у выбранного варианта. */
 @Composable
 private fun OptionRow(selected: Boolean, title: String, description: String, onClick: () -> Unit) {
+    val c = Ios.colors
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        RadioButton(selected = selected, onClick = null, colors = accentRadioColors())
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            .pressHighlight(interaction)
+            .selectable(
+                selected = selected,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.RadioButton,
+                onClick = onClick,
             )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = c.label)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = c.secondaryLabel)
+        }
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = c.accentText)
+            }
         }
     }
 }
 
 @Composable
 private fun NavRow(icon: ImageVector, title: String, summary: String, onClick: () -> Unit) {
+    val c = Ios.colors
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .pressHighlight(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+        IconTile(icon)
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = c.label)
             Text(
                 summary,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = c.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -559,7 +683,7 @@ private fun NavRow(icon: ImageVector, title: String, summary: String, onClick: (
         Icon(
             Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = c.tertiaryLabel,
         )
     }
 }
@@ -571,77 +695,126 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val c = Ios.colors
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .toggleable(value = checked, onValueChange = onCheckedChange, role = Role.Switch)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .pressHighlight(interaction)
+            .toggleable(
+                value = checked,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = c.label)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = c.secondaryLabel)
         }
-        Switch(checked = checked, onCheckedChange = null, colors = accentSwitchColors())
+        IosSwitch(checked = checked)
     }
 }
 
-@Composable
-private fun GroupLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.secondary,
-        modifier = Modifier.padding(start = 4.dp),
-    )
-}
+// ───────────────────────── Превью тем ─────────────────────────
 
+/** Миниатюра темы: «Светлая», «Тёмная» или половина на половину для «Как в системе». */
 @Composable
-private fun SettingsGroup(content: @Composable () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+private fun ThemeSwatch(mode: ThemeMode, selected: Boolean, onClick: () -> Unit) {
+    val c = Ios.colors
+    val shape = RoundedCornerShape(18.dp)
+    val ring by animateColorAsState(
+        targetValue = if (selected) c.accent else c.separator,
+        animationSpec = tween(180),
+        label = "swatch-ring",
+    )
+
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .iosClickable(role = Role.RadioButton, pressedScale = 0.96f, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column { content() }
+        Box(
+            Modifier
+                .size(width = 80.dp, height = 112.dp)
+                .clip(shape)
+                .drawBehind {
+                    when (mode) {
+                        ThemeMode.LIGHT -> drawMiniScreen(dark = false, from = 0f, to = size.width)
+                        ThemeMode.DARK -> drawMiniScreen(dark = true, from = 0f, to = size.width)
+                        ThemeMode.SYSTEM -> {
+                            drawMiniScreen(dark = false, from = 0f, to = size.width / 2f)
+                            drawMiniScreen(dark = true, from = size.width / 2f, to = size.width)
+                        }
+                    }
+                }
+                .border(if (selected) 3.dp else 1.dp, ring, shape)
+        )
+        Text(
+            text = mode.title,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (selected) c.accentText else c.secondaryLabel,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+        )
     }
 }
 
-@Composable
-private fun GroupDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-    )
-}
+/** Рисует упрощённый экран приложения в светлой или тёмной теме в пределах [from]..[to] по горизонтали. */
+private fun DrawScope.drawMiniScreen(dark: Boolean, from: Float, to: Float) {
+    val bg = if (dark) Color(0xFF000000) else Color(0xFFF2F2F7)
+    val card = if (dark) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
+    val line = if (dark) Color(0xFF3A3A3C) else Color(0xFFE5E5EA)
+    val w = size.width
+    val h = size.height
 
-@Composable
-private fun Section(
-    title: String,
-    hint: String,
-    content: @Composable () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            content()
-            Text(
-                hint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    clipRect(left = from, top = 0f, right = to, bottom = h) {
+        drawRect(bg)
+        // Главная карточка — оранжевая
+        drawRoundRect(
+            color = Brand.Orange,
+            topLeft = Offset(w * 0.10f, h * 0.12f),
+            size = Size(w * 0.80f, h * 0.30f),
+            cornerRadius = CornerRadius(10.dp.toPx()),
+        )
+        // Белая/чёрная карточка со строками
+        drawRoundRect(
+            color = card,
+            topLeft = Offset(w * 0.10f, h * 0.48f),
+            size = Size(w * 0.80f, h * 0.26f),
+            cornerRadius = CornerRadius(9.dp.toPx()),
+        )
+        drawRoundRect(
+            color = line,
+            topLeft = Offset(w * 0.18f, h * 0.55f),
+            size = Size(w * 0.50f, 4.dp.toPx()),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
+        drawRoundRect(
+            color = line,
+            topLeft = Offset(w * 0.18f, h * 0.63f),
+            size = Size(w * 0.36f, 4.dp.toPx()),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
+        // Панель вкладок с голубым акцентом
+        drawRoundRect(
+            color = card,
+            topLeft = Offset(w * 0.14f, h * 0.84f),
+            size = Size(w * 0.72f, h * 0.10f),
+            cornerRadius = CornerRadius(h * 0.05f),
+        )
+        drawRoundRect(
+            color = Brand.Sky,
+            topLeft = Offset(w * 0.18f, h * 0.855f),
+            size = Size(w * 0.22f, h * 0.07f),
+            cornerRadius = CornerRadius(h * 0.035f),
+        )
     }
 }
 

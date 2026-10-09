@@ -22,11 +22,12 @@ class MainActivity : ComponentActivity() {
             val dark = vm.themeMode.isDark()
 
             // Значки в строке состояния и панели навигации должны соответствовать выбранной теме,
-            // а не теме системы: иначе при ручном выборе они могут слиться с фоном
+            // а не теме системы: иначе при ручном выборе они могут слиться с фоном.
+            // Обе панели прозрачные: содержимое уходит под плавающую стеклянную панель вкладок.
             DisposableEffect(dark) {
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
-                    navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark },
+                    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                 )
                 onDispose { }
             }
@@ -35,10 +36,5 @@ class MainActivity : ComponentActivity() {
                 AppRoot(vm)
             }
         }
-    }
-
-    private companion object {
-        val LIGHT_SCRIM = Color.argb(0xE6, 0xFF, 0xFF, 0xFF)
-        val DARK_SCRIM = Color.argb(0x80, 0x1B, 0x1B, 0x1B)
     }
 }
