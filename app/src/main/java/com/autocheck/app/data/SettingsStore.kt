@@ -101,6 +101,29 @@ class SettingsStore(context: Context) {
 
     fun saveThemeMode(mode: ThemeMode) = prefs.edit { putString(KEY_THEME, mode.name) }
 
+    fun loadLogPrefs(): LogPrefs {
+        val d = LogPrefs()
+        val kinds = prefs.getString(KEY_LOG_KINDS, null)
+            ?.split(',')
+            ?.mapNotNull { runCatching { ResponseKind.valueOf(it) }.getOrNull() }
+            ?.toSet()
+            ?: d.kinds
+        return LogPrefs(
+            saveResponses = prefs.getBoolean(KEY_LOG_SAVE, d.saveResponses),
+            kinds = kinds,
+            maxEntries = prefs.getInt(KEY_LOG_MAX, d.maxEntries)
+                .coerceIn(LogPrefs.MIN_ENTRIES, LogPrefs.MAX_ENTRIES),
+            downloadDir = prefs.getString(KEY_LOG_DIR, null)?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    fun saveLogPrefs(value: LogPrefs) = prefs.edit {
+        putBoolean(KEY_LOG_SAVE, value.saveResponses)
+        putString(KEY_LOG_KINDS, value.kinds.joinToString(",") { it.name })
+        putInt(KEY_LOG_MAX, value.maxEntries)
+        if (value.downloadDir == null) remove(KEY_LOG_DIR) else putString(KEY_LOG_DIR, value.downloadDir)
+    }
+
     /** Запускать ли проверку автоматически после перезагрузки устройства. По умолчанию выключено. */
     fun loadAutoStart(): Boolean = prefs.getBoolean(KEY_AUTO_START, false)
 
@@ -116,6 +139,10 @@ class SettingsStore(context: Context) {
         const val KEY_ROUTE = "route"
         const val KEY_THEME = "theme_mode"
         const val KEY_AUTO_START = "auto_start_on_boot"
+        const val KEY_LOG_SAVE = "log_save_responses"
+        const val KEY_LOG_KINDS = "log_response_kinds"
+        const val KEY_LOG_MAX = "log_max_entries"
+        const val KEY_LOG_DIR = "log_download_dir"
         const val KEY_N_LESSON = "notify_lesson"
         const val KEY_N_ERRORS = "notify_errors"
         const val KEY_N_WARNINGS = "notify_warnings"

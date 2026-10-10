@@ -1,5 +1,9 @@
 package com.autocheck.app.data
 
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 enum class LogLevel { INFO, SUCCESS, WARNING, ERROR }
@@ -26,6 +30,9 @@ enum class LogCategory {
 
     /** Пауза между проверками. В уведомлении не показывается никогда. */
     PAUSE,
+
+    /** Сохранённый ответ сервера (HTML-файл, открывается из журнала). В уведомлении не показывается никогда. */
+    RESPONSE,
 }
 
 data class LogEntry(
@@ -34,7 +41,53 @@ data class LogEntry(
     val level: LogLevel,
     val message: String,
     val category: LogCategory = LogCategory.SERVICE,
+    /** Момент записи (мс). Нужен, чтобы после перезапуска отличать вчерашние записи от сегодняшних. */
+    val timestamp: Long = 0L,
+    /** Имя файла с сохранённым ответом сервера; `null` — у записи нет ответа. */
+    val responseFile: String? = null,
 )
+
+/** Время записи; для записей не за сегодня добавляется дата. */
+fun LogEntry.displayTime(): String {
+    if (timestamp == 0L) return time
+    val day = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+    return if (day == LocalDate.now()) time else "${day.format(DATE_FORMAT)} $time"
+}
+
+private val DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM")
+
+/** Какие ответы сервера можно сохранять в журнал как HTML-файлы. */
+enum class ResponseKind(val title: String, val description: String) {
+    LOGIN("Вход", "Ответ сервера на вход по логину и паролю."),
+    SCHEDULE(
+        "Расписание",
+        "Страница расписания. Загружается при каждой проверке, поэтому быстро заполняет журнал.",
+    ),
+    CLICK("Нажатие кнопки", "Ответ сервера на нажатие кнопки занятия."),
+    ERROR(
+        "Ошибка",
+        "Ответы с ошибкой: HTTP-код не 2xx или сообщение об истёкшей сессии (нет прав доступа).",
+    ),
+}
+
+/** Настройки журнала. Применяются сразу и сохраняются на устройстве. */
+data class LogPrefs(
+    /** Сохранять ли ответы сервера как HTML-файлы. По умолчанию выключено. */
+    val saveResponses: Boolean = false,
+    /** Какие типы ответов сохранять (если [saveResponses] включено). */
+    val kinds: Set<ResponseKind> = setOf(ResponseKind.LOGIN, ResponseKind.CLICK, ResponseKind.ERROR),
+    /** Максимум записей в журнале: старые удаляются вместе с их HTML-файлами. */
+    val maxEntries: Int = DEFAULT_MAX_ENTRIES,
+    /** Папка для кнопки «Скачать» (адрес дерева документов Android); `null` — системная Download. */
+    val downloadDir: String? = null,
+) {
+    companion object {
+        const val DEFAULT_MAX_ENTRIES = 300
+        const val MIN_ENTRIES = 50
+        const val MAX_ENTRIES = 1000
+        const val ENTRIES_STEP = 50
+    }
+}
 
 enum class EngineStatus { STOPPED, CONNECTING, RUNNING, ERROR }
 
@@ -132,7 +185,7 @@ data class NotificationPrefs(
         LogCategory.WARNING -> warnings
         LogCategory.CHECK -> checks
         LogCategory.SERVICE -> service
-        LogCategory.PAUSE -> false
+        LogCategory.PAUSE, LogCategory.RESPONSE -> false
     }
 
     /** Сколько типов событий включено (для краткого описания в настройках). */

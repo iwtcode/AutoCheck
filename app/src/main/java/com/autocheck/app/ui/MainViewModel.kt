@@ -10,6 +10,7 @@ import com.autocheck.app.data.Account
 import com.autocheck.app.data.AccountType
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.Credentials
+import com.autocheck.app.data.LogPrefs
 import com.autocheck.app.data.NotificationPrefs
 import com.autocheck.app.data.SettingsStore
 import com.autocheck.app.data.ThemeMode
@@ -39,6 +40,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Настройки уведомлений применяются и сохраняются сразу. */
     var notifications by mutableStateOf(store.loadNotifications())
+        private set
+
+    /** Настройки журнала (ответы сервера, лимит записей) применяются и сохраняются сразу. */
+    var logPrefs by mutableStateOf(store.loadLogPrefs())
         private set
 
     /** Тема применяется и сохраняется сразу. */
@@ -96,6 +101,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         notifications = transform(notifications)
         store.saveNotifications(notifications)
         AutoClickState.setNotificationPrefs(notifications)
+    }
+
+    fun updateLogPrefs(transform: (LogPrefs) -> LogPrefs) {
+        val updated = transform(logPrefs)
+        if (updated == logPrefs) return
+        logPrefs = updated
+        store.saveLogPrefs(updated)
+        AutoClickState.setLogPrefs(updated)
     }
 
     fun updateThemeMode(mode: ThemeMode) {

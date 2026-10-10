@@ -8,6 +8,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,19 +26,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -45,6 +51,7 @@ import com.autocheck.app.data.EngineStatus
 import com.autocheck.app.data.LogEntry
 import com.autocheck.app.data.LogLevel
 import com.autocheck.app.data.Stats
+import com.autocheck.app.data.displayTime
 import com.autocheck.app.ui.components.Banner
 import com.autocheck.app.ui.components.CardShape
 import com.autocheck.app.ui.components.GroupHeader
@@ -53,6 +60,8 @@ import com.autocheck.app.ui.components.InsetDivider
 import com.autocheck.app.ui.components.LargeTitle
 import com.autocheck.app.ui.components.LinkText
 import com.autocheck.app.ui.components.iosClickable
+import com.autocheck.app.ui.components.pressHighlight
+import com.autocheck.app.ui.theme.Brand
 import com.autocheck.app.ui.theme.Ios
 import com.autocheck.app.ui.theme.MonoStyle
 import com.autocheck.app.ui.theme.color
@@ -123,14 +132,19 @@ fun HomeScreen(
     timeoutSec: Int,
     hasCredentials: Boolean,
     bottomInset: Dp,
+    resetSignal: Int,
     onToggle: () -> Unit,
     onOpenLog: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val scroll = rememberScrollState()
+    // Повторное нажатие на вкладку «Главная» — прокрутка в начало
+    LaunchedEffect(resetSignal) { if (resetSignal > 0) scroll.animateScrollTo(0) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scroll)
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
@@ -322,13 +336,39 @@ private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Строка журнала: цветная точка уровня, сообщение и время. Используется на главной и в «Журнале». */
+/**
+ * Строка журнала: цветная точка уровня, сообщение и время. Используется на главной и в «Журнале».
+ *
+ * Если у записи есть сохранённый ответ сервера и передан [onOpenResponse], строку можно нажать,
+ * чтобы открыть этот ответ.
+ */
 @Composable
-fun LogRow(entry: LogEntry, modifier: Modifier = Modifier) {
+fun LogRow(
+    entry: LogEntry,
+    modifier: Modifier = Modifier,
+    onOpenResponse: ((LogEntry) -> Unit)? = null,
+) {
     val c = Ios.colors
+    val openable = onOpenResponse != null && entry.responseFile != null
+    val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (openable) {
+                    Modifier
+                        .pressHighlight(interaction)
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null,
+                            role = Role.Button,
+                            onClickLabel = "Открыть ответ сервера",
+                            onClick = { onOpenResponse?.invoke(entry) },
+                        )
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -336,9 +376,10 @@ fun LogRow(entry: LogEntry, modifier: Modifier = Modifier) {
             Modifier
                 .padding(top = 7.dp)
                 .size(10.dp)
-                .background(entry.level.color(), CircleShape)
+                // Записи с сохранённым HTML-ответом помечены жёлто-оранжевой точкой, остальные — цветом уровня
+                .background(if (entry.responseFile != null) Brand.Amber else entry.level.color(), CircleShape)
         )
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 entry.message,
                 style = MaterialTheme.typography.bodyMedium,
@@ -348,7 +389,17 @@ fun LogRow(entry: LogEntry, modifier: Modifier = Modifier) {
                     else -> null
                 },
             )
-            Text(entry.time, style = MonoStyle, color = c.secondaryLabel)
+            Text(entry.displayTime(), style = MonoStyle, color = c.secondaryLabel)
+        }
+        if (openable) {
+            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("HTML", style = MaterialTheme.typography.labelMedium, color = c.accentText)
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = c.tertiaryLabel,
+                )
+            }
         }
     }
 }

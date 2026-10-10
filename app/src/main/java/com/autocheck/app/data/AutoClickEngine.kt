@@ -96,6 +96,7 @@ class AutoClickEngine(private val newClient: () -> SutClient) {
     /** Один проход по одному аккаунту — тело цикла `for account in self.accounts` из Python. */
     private suspend fun process(session: Session, tag: String?): Outcome {
         val client = session.client
+        client.accountTag = tag
         try {
             if (!session.authorized && !signIn(session, tag)) return Outcome.BLOCKED
 

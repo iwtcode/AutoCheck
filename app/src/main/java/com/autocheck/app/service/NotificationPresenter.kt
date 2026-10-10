@@ -58,7 +58,7 @@ object NotificationPresenter {
         for (entry in logs.asReversed()) {
             if (entry.id <= baselineId) break
             when (entry.category) {
-                LogCategory.PAUSE -> Unit
+                LogCategory.PAUSE, LogCategory.RESPONSE -> Unit
                 LogCategory.CHECK, LogCategory.LESSON -> {
                     if (prefs.shows(entry.category)) return entry
                     problemsResolved = true

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.autocheck.app.data.LogEntry
+import com.autocheck.app.ui.components.ExportBar
 import com.autocheck.app.ui.components.IconTile
 import com.autocheck.app.ui.components.InsetDivider
 import com.autocheck.app.ui.components.LargeTitle
@@ -32,10 +35,25 @@ import com.autocheck.app.ui.theme.Ios
 
 private val GroupRadius = 26.dp
 
-/** Журнал: новые записи сверху, записи сгруппированы в одну скруглённую карточку. */
+/**
+ * Журнал: новые записи сверху, записи сгруппированы в одну скруглённую карточку.
+ * Над списком — панель «Копировать / Скачать / Поделиться» для всего журнала (.log).
+ */
 @Composable
-fun LogScreen(logs: List<LogEntry>, bottomInset: Dp, onClear: () -> Unit) {
+fun LogScreen(
+    logs: List<LogEntry>,
+    bottomInset: Dp,
+    resetSignal: Int,
+    onClear: () -> Unit,
+    onOpenResponse: (LogEntry) -> Unit,
+    onCopy: () -> Unit,
+    onDownload: () -> Unit,
+    onShare: () -> Unit,
+) {
     val c = Ios.colors
+    val listState = rememberLazyListState()
+    // Повторное нажатие на вкладку «Журнал» — к самым новым записям
+    LaunchedEffect(resetSignal) { if (resetSignal > 0) listState.animateScrollToItem(0) }
 
     Column(Modifier.fillMaxSize()) {
         LargeTitle(
@@ -49,6 +67,15 @@ fun LogScreen(logs: List<LogEntry>, bottomInset: Dp, onClear: () -> Unit) {
                     enabled = logs.isNotEmpty(),
                 )
             },
+        )
+
+        // Весь журнал целиком (.log): копировать, сохранить в Download или отправить
+        ExportBar(
+            onCopy = onCopy,
+            onDownload = onDownload,
+            onShare = onShare,
+            enabled = logs.isNotEmpty(),
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
         )
 
         if (logs.isEmpty()) {
@@ -73,6 +100,7 @@ fun LogScreen(logs: List<LogEntry>, bottomInset: Dp, onClear: () -> Unit) {
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomInset),
             ) {
@@ -93,7 +121,7 @@ fun LogScreen(logs: List<LogEntry>, bottomInset: Dp, onClear: () -> Unit) {
                             .background(c.card)
                     ) {
                         if (!first) InsetDivider(startInset = 38.dp)
-                        LogRow(entry)
+                        LogRow(entry, onOpenResponse = onOpenResponse)
                     }
                 }
             }

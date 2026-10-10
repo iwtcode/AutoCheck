@@ -5,7 +5,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -35,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -53,9 +61,16 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.EngineStatus
+import com.autocheck.app.data.LogEntry
+import com.autocheck.app.data.LogCategory
+import com.autocheck.app.data.LogExporter
+import com.autocheck.app.ui.components.ToastHost
+import com.autocheck.app.ui.components.ToastState
+import com.autocheck.app.ui.components.rememberExporter
 import com.autocheck.app.ui.components.floating
 import com.autocheck.app.ui.screens.HomeScreen
 import com.autocheck.app.ui.screens.LogScreen
+import com.autocheck.app.ui.screens.ResponseViewerScreen
 import com.autocheck.app.ui.screens.SettingsScreen
 import com.autocheck.app.ui.theme.Ios
 
@@ -71,11 +86,19 @@ private val TabBarSpace: Dp = 88.dp
 @Composable
 fun AppRoot(vm: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    // Запись журнала, ответ сервера которой сейчас открыт на весь экран
+    var viewingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Растёт при каждом повторном нажатии на уже открытую вкладку: экран возвращается в начало
+    var reselect by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
 
     val status by AutoClickState.status.collectAsStateWithLifecycle()
     val stats by AutoClickState.stats.collectAsStateWithLifecycle()
     val logs by AutoClickState.logs.collectAsStateWithLifecycle()
+
+    // Подтверждения («Скопировано», «Сохранено») и выполнение копирования/скачивания/отправки для журнала и ответов
+    val toast = remember { ToastState() }
+    val exporter = rememberExporter(vm.logPrefs.downloadDir, toast)
 
     // Разрешение на уведомления нужно на Android 13+; сервис стартует в любом случае
     val notificationPermission = rememberLauncherForActivityResult(
@@ -95,6 +118,18 @@ fun AppRoot(vm: MainViewModel) {
         }
     }
 
+    // Ответ сервера открыт на весь экран. Если запись уже удалена из журнала, он закрывается
+    val viewing = viewingId?.let { id -> logs.firstOrNull { it.id == id && it.responseFile != null } }
+    // Во время анимации закрытия запись уже не «открыта», но экран ещё на виду — помним последнюю
+    var lastViewed by remember { mutableStateOf<LogEntry?>(null) }
+    if (viewing != null) lastViewed = viewing
+    // 0 — виден журнал, 1 — ответ сервера открыт; журнал под ним уходит влево, как страница настроек
+    val shift by animateFloatAsState(
+        targetValue = if (viewing != null) 1f else 0f,
+        animationSpec = tween(320),
+        label = "viewer-shift",
+    )
+
     val c = Ios.colors
     // Содержимое прокручивается под плавающей панелью, поэтому экранам нужен нижний отступ
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + TabBarSpace
@@ -110,16 +145,21 @@ fun AppRoot(vm: MainViewModel) {
                 label = "tabs",
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = -size.width / 4f * shift
+                        alpha = 1f - shift
+                    }
                     .statusBarsPadding(),
             ) { current ->
                 when (current) {
                     Tab.Home -> HomeScreen(
                         status = status,
                         stats = stats,
-                        recentLogs = logs.takeLast(4).reversed(),
+                        recentLogs = logs.filter { it.category != LogCategory.RESPONSE }.takeLast(4).reversed(),
                         timeoutSec = vm.saved.timeoutSec,
                         hasCredentials = vm.canStart,
                         bottomInset = bottomInset,
+                        resetSignal = reselect,
                         onToggle = onToggle,
                         onOpenLog = { tab = Tab.Log },
                         onOpenSettings = { tab = Tab.Settings },
@@ -128,20 +168,52 @@ fun AppRoot(vm: MainViewModel) {
                     Tab.Log -> LogScreen(
                         logs = logs.asReversed(),
                         bottomInset = bottomInset,
+                        resetSignal = reselect,
                         onClear = vm::clearLogs,
+                        onOpenResponse = { viewingId = it.id },
+                        onCopy = { exporter.copy("Весь журнал", LogExporter.formatLog(logs)) },
+                        onDownload = {
+                            exporter.download(LogExporter.logFileName(), LogExporter.MIME_LOG_SAVE, LogExporter.formatLog(logs))
+                        },
+                        onShare = {
+                            exporter.share(LogExporter.logFileName(), LogExporter.MIME_LOG_SHARE, LogExporter.formatLog(logs))
+                        },
                     )
 
                     Tab.Settings -> SettingsScreen(
                         vm = vm,
                         bottomInset = bottomInset,
+                        resetSignal = reselect,
                     )
                 }
             }
 
             FloatingTabBar(
                 selected = tab,
-                onSelect = { tab = it },
+                onSelect = { if (it == tab) reselect++ else tab = it },
                 modifier = Modifier.align(Alignment.BottomCenter),
+            )
+
+            // Ответ сервера поверх всего, включая панель вкладок. Выезжает справа и уезжает обратно,
+            // с той же анимацией, что и переход в раздел настроек
+            AnimatedVisibility(
+                visible = viewing != null,
+                modifier = Modifier.fillMaxSize(),
+                enter = slideInHorizontally(tween(320)) { it / 3 } + fadeIn(tween(320)),
+                exit = slideOutHorizontally(tween(320)) { it / 3 } + fadeOut(tween(200)),
+            ) {
+                lastViewed?.let { entry ->
+                    ResponseViewerScreen(entry = entry, exporter = exporter, onClose = { viewingId = null })
+                }
+            }
+
+            // Поверх всего, включая экран ответа сервера
+            ToastHost(
+                state = toast,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, start = 20.dp, end = 20.dp),
             )
         }
     }

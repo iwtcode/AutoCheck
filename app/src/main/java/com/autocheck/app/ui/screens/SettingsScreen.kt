@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -14,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -44,6 +47,8 @@ import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
@@ -90,7 +95,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.autocheck.app.data.Account
 import com.autocheck.app.data.AccountType
+import com.autocheck.app.data.LogExporter
+import com.autocheck.app.data.LogPrefs
 import com.autocheck.app.data.NotificationPrefs
+import com.autocheck.app.data.ResponseKind
 import com.autocheck.app.data.ThemeMode
 import com.autocheck.app.data.TrafficRoute
 import com.autocheck.app.service.AutoStartSettings
@@ -125,12 +133,13 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Account("Аккаунты", Icons.Rounded.Person),
     Connection("Подключение", Icons.Rounded.Wifi),
     Notifications("Уведомления", Icons.Rounded.Notifications),
+    Log("Журнал", Icons.Rounded.History),
     Appearance("Оформление", Icons.Rounded.Palette),
     Background("Работа в фоне", Icons.Rounded.BatteryChargingFull),
 }
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, bottomInset: Dp) {
+fun SettingsScreen(vm: MainViewModel, bottomInset: Dp, resetSignal: Int) {
     val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var ignoringBattery by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
@@ -151,6 +160,13 @@ fun SettingsScreen(vm: MainViewModel, bottomInset: Dp) {
             notificationsAllowed = areNotificationsAllowed(context)
             delay(CHECK_INTERVAL_MS)
         }
+    }
+
+    // Повторное нажатие на вкладку «Настройки»: из раздела — к списку разделов, а на списке — в его начало
+    val hubScroll = rememberScrollState()
+    LaunchedEffect(resetSignal) {
+        if (resetSignal == 0) return@LaunchedEffect
+        if (page != null) page = null else hubScroll.animateScrollTo(0)
     }
 
     // Системная кнопка «Назад» возвращает к списку разделов
@@ -178,6 +194,7 @@ fun SettingsScreen(vm: MainViewModel, bottomInset: Dp) {
                     null -> SettingsHub(
                         vm = vm,
                         ignoringBattery = ignoringBattery,
+                        scrollState = hubScroll,
                         onOpen = { page = it },
                     )
 
@@ -188,6 +205,8 @@ fun SettingsScreen(vm: MainViewModel, bottomInset: Dp) {
                         notificationsAllowed = notificationsAllowed,
                         onBack = { page = null },
                     )
+
+                    SettingsPage.Log -> LogPage(vm, onBack = { page = null })
 
                     SettingsPage.Appearance -> AppearancePage(vm, onBack = { page = null })
 
@@ -205,8 +224,13 @@ fun SettingsScreen(vm: MainViewModel, bottomInset: Dp) {
 // ───────────────────────── Главная страница настроек ─────────────────────────
 
 @Composable
-private fun SettingsHub(vm: MainViewModel, ignoringBattery: Boolean, onOpen: (SettingsPage) -> Unit) {
-    PageScaffold {
+private fun SettingsHub(
+    vm: MainViewModel,
+    ignoringBattery: Boolean,
+    scrollState: ScrollState,
+    onOpen: (SettingsPage) -> Unit,
+) {
+    PageScaffold(scrollState) {
         LargeTitle("Настройки")
 
         GroupedCard {
@@ -236,6 +260,16 @@ private fun summaryOf(page: SettingsPage, vm: MainViewModel, ignoringBattery: Bo
         SettingsPage.Connection -> "${vm.route.title} · проверка каждые ${vm.timeout} с"
         SettingsPage.Notifications ->
             "Типов событий в уведомлении: ${vm.notifications.enabledEventTypes} из ${NotificationPrefs.EVENT_TYPES}"
+
+        SettingsPage.Log -> {
+            val prefs = vm.logPrefs
+            val responses = if (prefs.saveResponses) {
+                "ответы сервера: ${prefs.kinds.size} из ${ResponseKind.entries.size}"
+            } else {
+                "ответы сервера не сохраняются"
+            }
+            "$responses · до ${prefs.maxEntries} записей"
+        }
 
         SettingsPage.Appearance -> vm.themeMode.title
 
@@ -496,6 +530,122 @@ private fun NotificationsPage(vm: MainViewModel, notificationsAllowed: Boolean, 
 }
 
 @Composable
+private fun LogPage(vm: MainViewModel, onBack: () -> Unit) {
+    val c = Ios.colors
+    val prefs = vm.logPrefs
+    val context = LocalContext.current
+
+    val folderLabel = remember(prefs.downloadDir) { LogExporter.folderLabel(context, prefs.downloadDir) }
+    val folderFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            // Право на папку нужно сохранить, иначе оно пропадёт после перезапуска приложения
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, folderFlags) }
+            releaseFolder(context, prefs.downloadDir, except = uri.toString())
+            vm.updateLogPrefs { it.copy(downloadDir = uri.toString()) }
+        }
+    }
+
+    PageScaffold {
+        PageHeader("Журнал", onBack)
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Ответы сервера")
+            GroupedCard {
+                SwitchRow(
+                    title = "Сохранять ответы сервера",
+                    description = "Ответ на каждый выбранный запрос сохраняется как HTML-файл. " +
+                        "Его можно открыть из журнала.",
+                    checked = prefs.saveResponses,
+                    onCheckedChange = { on -> vm.updateLogPrefs { it.copy(saveResponses = on) } },
+                )
+            }
+            GroupFooter(
+                "Ответы могут содержать личные данные, например расписание. " +
+                    "Файлы хранятся только в закрытой памяти приложения на этом устройстве."
+            )
+        }
+
+        if (prefs.saveResponses) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                GroupHeader("Какие ответы сохранять")
+                GroupedCard {
+                    ResponseKind.entries.forEachIndexed { index, kind ->
+                        if (index > 0) InsetDivider()
+                        SwitchRow(
+                            title = kind.title,
+                            description = kind.description,
+                            checked = kind in prefs.kinds,
+                            onCheckedChange = { on ->
+                                vm.updateLogPrefs { it.copy(kinds = if (on) it.kinds + kind else it.kinds - kind) }
+                            },
+                        )
+                    }
+                }
+                GroupFooter(
+                    "Каждый сохранённый ответ — отдельная запись в журнале. " +
+                        "Нажмите на неё, чтобы открыть ответ как страницу или посмотреть исходный код."
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Скачивание")
+            GroupedCard {
+                NavRow(
+                    icon = Icons.Rounded.Folder,
+                    title = "Папка для файлов",
+                    summary = folderLabel,
+                    onClick = { folderPicker.launch(null) },
+                )
+                if (prefs.downloadDir != null) {
+                    InsetDivider(startInset = 62.dp)
+                    ActionRow(
+                        title = "Вернуть папку Download",
+                        onClick = {
+                            releaseFolder(context, prefs.downloadDir, except = null)
+                            vm.updateLogPrefs { it.copy(downloadDir = null) }
+                        },
+                    )
+                }
+            }
+            GroupFooter(
+                "Сюда кнопка «Скачать» сохраняет весь журнал (.log) и отдельные ответы сервера (.html). " +
+                    "По умолчанию это системная папка Download. Если выбранная папка станет недоступна, " +
+                    "файл сохранится в Download."
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Размер журнала")
+            GroupedCard {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Максимум записей", style = MaterialTheme.typography.bodyLarge, color = c.secondaryLabel)
+                        Text("${prefs.maxEntries}", style = MaterialTheme.typography.titleMedium, color = c.accentText)
+                    }
+                    IosSlider(
+                        value = prefs.maxEntries.toFloat(),
+                        onValueChange = { v ->
+                            val step = LogPrefs.ENTRIES_STEP
+                            val rounded = ((v / step).roundToInt() * step)
+                                .coerceIn(LogPrefs.MIN_ENTRIES, LogPrefs.MAX_ENTRIES)
+                            vm.updateLogPrefs { it.copy(maxEntries = rounded) }
+                        },
+                        valueRange = LogPrefs.MIN_ENTRIES.toFloat()..LogPrefs.MAX_ENTRIES.toFloat(),
+                    )
+                }
+            }
+            GroupFooter(
+                "Журнал хранится в памяти устройства и не стирается при перезапуске. Когда записей становится " +
+                    "больше лимита, самые старые удаляются вместе с их HTML-файлами. Если уменьшить лимит, " +
+                    "лишние старые записи удаляются сразу."
+            )
+        }
+    }
+}
+
+@Composable
 private fun AppearancePage(vm: MainViewModel, onBack: () -> Unit) {
     PageScaffold {
         PageHeader("Оформление", onBack)
@@ -606,11 +756,14 @@ private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: 
 
 /** Прокручиваемая страница с едиными отступами. */
 @Composable
-private fun PageScaffold(content: @Composable ColumnScope.() -> Unit) {
+private fun PageScaffold(
+    scrollState: ScrollState = rememberScrollState(),
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = LocalContentBottom.current),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         content = content,
@@ -758,6 +911,38 @@ private fun NavRow(icon: ImageVector, title: String, summary: String, onClick: (
             Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
             tint = c.tertiaryLabel,
+        )
+    }
+}
+
+/** Строка-действие: голубой текст по центру, как «Сбросить» в системных настройках iOS. */
+@Composable
+private fun ActionRow(title: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .pressHighlight(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = Ios.colors.accentText)
+    }
+}
+
+/** Отпускает сохранённое право на прежнюю папку скачивания, чтобы не копить неиспользуемые права. */
+private fun releaseFolder(context: Context, old: String?, except: String?) {
+    if (old == null || old == except) return
+    runCatching {
+        context.contentResolver.releasePersistableUriPermission(
+            Uri.parse(old),
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
         )
     }
 }

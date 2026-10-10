@@ -28,6 +28,9 @@ import com.autocheck.app.data.ThemeMode
 object Brand {
     val Orange = Color(0xFFFF8A00)
     val Sky = Color(0xFF14B1FF)
+
+    /** Жёлто-оранжевый индикатор записей журнала с сохранённым HTML-ответом сервера. */
+    val Amber = Color(0xFFFFC107)
 }
 
 /** Семантические цвета интерфейса. Получать через [Ios.colors]. */

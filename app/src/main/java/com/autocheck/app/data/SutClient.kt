@@ -42,6 +42,10 @@ class SutClient(
     private val route: TrafficRoute = TrafficRoute.SYSTEM,
     private val router: NetworkRouter? = null,
 ) {
+    /** Подпись аккаунта для записей о сохранённых ответах; задаётся движком (есть только при нескольких аккаунтах). */
+    @Volatile
+    var accountTag: String? = null
+
     private val cookieJar = MemoryCookieJar()
     private var lastNetwork: Network? = null
 
@@ -76,7 +80,7 @@ class SutClient(
     suspend fun login(login: String, password: String): LoginResult {
         cookieJar.clear() // как и в Python — каждая авторизация начинается с новой сессии
 
-        http.newCall(Request.Builder().url("$CABINET?login=no").get().build()).text()
+        http.newCall(Request.Builder().url("$CABINET?login=no").get().build()).text(ResponseKind.LOGIN, save = false)
 
         val authUrl = "${CABINET}lib/autentificationok.php".toHttpUrl().newBuilder()
             .addQueryParameter("users", login)
@@ -84,12 +88,12 @@ class SutClient(
             .build()
         val answer = http.newCall(
             Request.Builder().url(authUrl).post(EMPTY_BODY.toRequestBody()).build()
-        ).text()
+        ).text(ResponseKind.LOGIN)
 
         // как в Python: `if '1' in text`
         if (!answer.contains('1')) return LoginResult.BAD_CREDENTIALS
 
-        http.newCall(Request.Builder().url("$CABINET?login=yes").get().build()).text()
+        http.newCall(Request.Builder().url("$CABINET?login=yes").get().build()).text(ResponseKind.LOGIN)
         return LoginResult.SUCCESS
     }
 
@@ -111,7 +115,8 @@ class SutClient(
 
     /** @throws IOException, IllegalStateException */
     suspend fun fetchSchedule(): ScheduleResult {
-        val text = http.newCall(Request.Builder().url(SCHEDULE_URL).get().build()).text()
+        val text = http.newCall(Request.Builder().url(SCHEDULE_URL).get().build())
+            .text(ResponseKind.SCHEDULE) { it.contains(ERR_MSG) }
         if (text.contains(ERR_MSG)) return ScheduleResult.SessionExpired
 
         val doc = Jsoup.parse(text)
@@ -138,14 +143,39 @@ class SutClient(
             .build()
         val body = http.newCall(
             Request.Builder().url(url).post(EMPTY_BODY.toRequestBody()).build()
-        ).text()
+        ).text(ResponseKind.CLICK)
         return body.isNotEmpty()
     }
 
-    private suspend fun Call.text(): String = withContext(Dispatchers.IO) {
+    /**
+     * Выполняет запрос и возвращает тело ответа.
+     *
+     * Ответ уходит в журнал как HTML-файл (если это включено в настройках): ответ с ошибкой — как
+     * [ResponseKind.ERROR], остальные — как [source]. В журнал не попадает адрес запроса: в нём
+     * при входе передаются логин и пароль.
+     *
+     * @param save сохранять ли обычный ответ; ошибки сохраняются всегда (если выбран этот тип)
+     * @param isError распознаёт в теле успешного ответа сообщение об ошибке
+     */
+    private suspend fun Call.text(
+        source: ResponseKind,
+        save: Boolean = true,
+        isError: (String) -> Boolean = { false },
+    ): String = withContext(Dispatchers.IO) {
         await().use { response ->
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-            response.body?.string().orEmpty()
+            val failed = !response.isSuccessful
+            val body = if (failed) {
+                runCatching { response.body?.string().orEmpty() }.getOrDefault("")
+            } else {
+                response.body?.string().orEmpty()
+            }
+            if (failed || isError(body)) {
+                AutoClickState.recordResponse(ResponseKind.ERROR, source, response.code, accountTag, body)
+            } else if (save) {
+                AutoClickState.recordResponse(source, source, response.code, accountTag, body)
+            }
+            if (failed) throw IOException("HTTP ${response.code}")
+            body
         }
     }
 

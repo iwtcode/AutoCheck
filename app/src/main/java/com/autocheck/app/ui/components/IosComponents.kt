@@ -113,8 +113,11 @@ fun Modifier.iosClickable(
 @Composable
 fun Modifier.pressHighlight(interaction: MutableInteractionSource): Modifier {
     val pressed by interaction.collectIsPressedAsState()
+    // Невидимое состояние — тот же цвет с нулевой прозрачностью, а не Color.Transparent (чёрный с alpha 0):
+    // иначе при переходе цвет на мгновение уходит в тёмный, и строка «затемняется» дважды — при нажатии и отпускании
+    val fill = Ios.colors.fill
     val bg by animateColorAsState(
-        targetValue = if (pressed) Ios.colors.fill else Color.Transparent,
+        targetValue = if (pressed) fill else fill.copy(alpha = 0f),
         animationSpec = tween(120),
         label = "row-press",
     )
